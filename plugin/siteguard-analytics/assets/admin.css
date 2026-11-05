@@ -1,0 +1,848 @@
+/* SiteGuard admin surfaces.
+   One dark charcoal palette, shared with the Local Assistant pages, so the two
+   plugins read as one family inside wp-admin. Only the plugin's own canvas is
+   dark; the WordPress sidebar and toolbar are left alone. No external font or
+   image is loaded: the mark is drawn inline in Views::mark(). */
+
+.sg-wrap {
+  --sg-bg: #14171b;
+  --sg-panel: #1b1f24;
+  --sg-panel-2: #20252b;
+  --sg-line: #2b323a;
+  --sg-line-soft: #242a31;
+  --sg-ink: #e8ebef;
+  --sg-muted: #9aa4b0;
+  --sg-accent: #e2a33f;
+  --sg-accent-ink: #1a1205;
+  --sg-ok: #5cc98c;
+  --sg-warn: #e6b45a;
+  --sg-bad: #f07a6e;
+
+  max-width: 1060px;
+  margin: 16px 16px 0 0;
+  padding: 16px 18px 20px;
+  background:
+    radial-gradient(1100px 300px at 100% 0, rgba(226, 163, 63, 0.07), transparent 62%),
+    var(--sg-bg);
+  border: 1px solid var(--sg-line);
+  border-radius: 12px;
+  color: var(--sg-ink);
+  font: 13px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  box-shadow: 0 22px 60px rgba(0, 0, 0, 0.18);
+}
+
+.sg-wrap *,
+.sg-wrap *::before,
+.sg-wrap *::after {
+  box-sizing: border-box;
+}
+
+.sg-wrap a {
+  color: var(--sg-accent);
+}
+
+.sg-wrap a:hover,
+.sg-wrap a:focus {
+  color: #f2b856;
+}
+
+/* Header ---------------------------------------------------------------- */
+.sg-head {
+  margin: 0 0 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--sg-line-soft);
+}
+
+.sg-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.sg-logo {
+  width: 32px;
+  height: 32px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  color: var(--sg-accent);
+  background: linear-gradient(180deg, #272d34, #1d2228);
+  border: 1px solid #3a434d;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.sg-logo svg {
+  width: 19px;
+  height: 19px;
+}
+
+.sg-word {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+  min-width: 0;
+}
+
+.sg-wordmark {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: var(--sg-ink);
+}
+
+.sg-wordmark em {
+  font-style: normal;
+  color: var(--sg-accent);
+}
+
+.sg-kicker {
+  font-size: 11.5px;
+  color: var(--sg-muted);
+}
+
+.sg-site {
+  margin-left: auto;
+  padding: 4px 10px;
+  border: 1px solid var(--sg-line);
+  border-radius: 999px;
+  background: var(--sg-panel);
+  color: var(--sg-muted) !important;
+  font-size: 12px;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.sg-site:hover,
+.sg-site:focus {
+  border-color: #3d4652;
+  color: var(--sg-ink) !important;
+}
+
+/* Tab strip. These are anchors first, so a page without JavaScript still
+   reaches every section; admin.js turns them into tabs. */
+.sg-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 14px 0 0;
+  padding: 3px;
+  background: var(--sg-panel);
+  border: 1px solid var(--sg-line);
+  border-radius: 8px;
+}
+
+.sg-nav a {
+  padding: 5px 10px;
+  border-radius: 6px;
+  color: var(--sg-muted);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-decoration: none;
+  box-shadow: inset 0 0 0 1px transparent;
+}
+
+.sg-nav a:hover,
+.sg-nav a:focus {
+  background: var(--sg-panel-2);
+  color: var(--sg-ink);
+}
+
+.sg-nav a.is-on {
+  background: #262c33;
+  color: var(--sg-ink);
+  box-shadow: inset 0 0 0 1px var(--sg-line);
+}
+
+.sg-title {
+  margin-top: 14px;
+}
+
+.sg-head h1 {
+  margin: 0;
+  font-size: 19px;
+  line-height: 1.25;
+  font-weight: 650;
+  color: var(--sg-ink);
+}
+
+.sg-sub,
+.sg-lead {
+  color: var(--sg-muted);
+  max-width: 78ch;
+}
+
+.sg-sub {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+}
+
+.sg-lead {
+  margin: 4px 0 14px;
+}
+
+/* Stats and cards -------------------------------------------------------- */
+.sg-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.sg-stat {
+  background: var(--sg-panel);
+  border: 1px solid var(--sg-line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sg-stat-value {
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.1;
+  color: var(--sg-ink);
+}
+
+.sg-stat-label {
+  color: var(--sg-muted);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sg-grid {
+  display: grid;
+  /* min() keeps one column from forcing the page wider than a phone. */
+  grid-template-columns: repeat(auto-fit, minmax(min(340px, 100%), 1fr));
+  gap: 12px;
+}
+
+.sg-card {
+  background: var(--sg-panel);
+  border: 1px solid var(--sg-line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+/* A table needs the full grid width; squeezed into one column its rows turn
+   into tall slivers. Browsers without :has() simply keep the old layout. */
+.sg-grid .sg-card:has(table) {
+  grid-column: 1 / -1;
+}
+
+.sg-card h2,
+.sg-card h3 {
+  margin: 0 0 6px;
+  font-size: 14px;
+  color: var(--sg-ink);
+}
+
+/* Sections ------------------------------------------------------------- */
+/* One page, many sections. The rule doubles as the anchor separator. */
+.sg-section {
+  margin: 0 0 8px;
+  padding-top: 18px;
+  border-top: 1px solid var(--sg-line-soft);
+  scroll-margin-top: 48px;
+}
+
+.sg-section:first-of-type {
+  margin-top: 14px;
+  padding-top: 0;
+  border-top: 0;
+}
+
+.sg-section-title {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.25;
+  letter-spacing: -0.01em;
+  color: var(--sg-ink);
+}
+
+.sg-section .sg-sub {
+  margin: 4px 0 10px;
+}
+
+/* FAQ, collapsed until opened. */
+.sg-faq {
+  display: grid;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.sg-faq details {
+  background: var(--sg-panel);
+  border: 1px solid var(--sg-line);
+  border-radius: 8px;
+  padding: 0 13px;
+}
+
+.sg-faq details[open] {
+  background: var(--sg-panel-2);
+}
+
+.sg-faq summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 10px 0;
+  font-weight: 600;
+  font-size: 12.5px;
+  color: var(--sg-ink);
+}
+
+.sg-faq summary::-webkit-details-marker {
+  display: none;
+}
+
+.sg-faq summary::after {
+  content: "+";
+  float: right;
+  color: var(--sg-muted);
+  font-weight: 400;
+  font-size: 15px;
+}
+
+.sg-faq details[open] summary::after {
+  content: "–";
+}
+
+.sg-faq p {
+  margin: 0 0 10px;
+  color: var(--sg-muted);
+  max-width: 78ch;
+  font-size: 12.5px;
+}
+
+/* Charts ---------------------------------------------------------------- */
+/* Drawn from the plugin's own tables. No chart library, no canvas: the data
+   is rendered server-side, so the page is complete before any script runs. */
+.sg-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sg-card-head h2,
+.sg-card-head h3 {
+  margin: 0 0 6px;
+}
+
+.sg-card-meta {
+  color: var(--sg-muted);
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.sg-chart {
+  margin: 8px 0 2px;
+}
+
+.sg-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin: 0 0 8px;
+}
+
+.sg-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--sg-muted);
+  font-size: 11.5px;
+}
+
+/* One custom property per tone; swatches, bars, and strokes all read it. */
+.sg-tone-accent { --sg-tone: var(--sg-accent); }
+.sg-tone-ok { --sg-tone: var(--sg-ok); }
+.sg-tone-warn { --sg-tone: var(--sg-warn); }
+.sg-tone-bad { --sg-tone: var(--sg-bad); }
+.sg-tone-muted { --sg-tone: var(--sg-muted); }
+.sg-tone-info { --sg-tone: #6fa8dc; }
+
+.sg-swatch {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--sg-tone, var(--sg-accent));
+}
+
+.sg-plot {
+  display: flex;
+  gap: 8px;
+}
+
+.sg-yaxis {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 132px;
+  min-width: 28px;
+  color: var(--sg-muted);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.sg-plot-main {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.sg-chart-svg {
+  display: block;
+  width: 100%;
+  height: 132px;
+  overflow: visible;
+}
+
+.sg-gridline {
+  stroke: var(--sg-line-soft);
+  stroke-width: 1;
+}
+
+.sg-chart-line {
+  fill: none;
+  stroke: var(--sg-tone, var(--sg-accent));
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
+.sg-area {
+  fill: var(--sg-tone, var(--sg-accent));
+  fill-opacity: 0.16;
+  stroke: none;
+}
+
+.sg-chart-empty {
+  position: absolute;
+  inset: 0 0 18px;
+  display: grid;
+  place-items: center;
+  color: var(--sg-muted);
+  font-size: 11.5px;
+}
+
+.sg-xaxis {
+  position: relative;
+  height: 16px;
+  margin-top: 2px;
+}
+
+.sg-xlabel {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  color: var(--sg-muted);
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+.sg-xlabel.start { transform: none; }
+.sg-xlabel.end { transform: translateX(-100%); }
+
+/* Ranked bars for pages and referrers. */
+.sg-bars {
+  display: grid;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.sg-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(56px, 2fr) 4.4em;
+  align-items: center;
+  gap: 8px;
+}
+
+.sg-bar-label {
+  overflow: hidden;
+  color: var(--sg-ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sg-bar-track {
+  height: 16px;
+  overflow: hidden;
+  background: var(--sg-panel-2);
+  border-radius: 4px;
+}
+
+.sg-bar-fill {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(226, 163, 63, 0.45), var(--sg-accent));
+}
+
+.sg-bar-value {
+  color: var(--sg-muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* 100% stacked bar for devices and coverage. */
+.sg-split {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  margin: 10px 0 10px;
+  overflow: hidden;
+  background: var(--sg-panel-2);
+  border-radius: 4px;
+}
+
+.sg-split-seg {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  background: var(--sg-tone, var(--sg-accent));
+}
+
+.sg-legend-list {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sg-legend-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--sg-ink);
+  font-size: 12px;
+}
+
+.sg-legend-list b {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.sg-legend-list em {
+  min-width: 3.4em;
+  color: var(--sg-muted);
+  font-size: 11px;
+  font-style: normal;
+  text-align: right;
+}
+
+/* Compact feature chips: a fact list without a paragraph. */
+.sg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sg-chips li {
+  padding: 3px 9px;
+  background: var(--sg-panel-2);
+  border: 1px solid var(--sg-line);
+  border-radius: 999px;
+  color: var(--sg-muted);
+  font-size: 11.5px;
+}
+
+.sg-more {
+  margin: 10px 0 0;
+  font-size: 12px;
+}
+
+/* Tables ---------------------------------------------------------------- */
+.sg-wrap .widefat {
+  background: transparent;
+  border: 0;
+  color: var(--sg-ink);
+}
+
+.sg-wrap .widefat thead th {
+  background: transparent;
+  border-bottom: 1px solid var(--sg-line);
+  color: var(--sg-muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sg-wrap .widefat td {
+  border-bottom: 1px solid var(--sg-line-soft);
+  color: var(--sg-ink);
+}
+
+/* A row header is a label inside the body, not a column heading: it has to be
+   readable at body weight and colour. WordPress leaves it a dark grey. */
+.sg-wrap .sg-table tbody th {
+  color: var(--sg-ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.sg-wrap .widefat.striped > tbody > :nth-child(odd) {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.sg-wrap .widefat tbody tr:hover {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.sg-table code {
+  word-break: break-all;
+  color: #cfd6de;
+}
+
+/* The table fills its card. The wrapper, not the table, is the scroll box: a
+   display:block table shrinks to its content and leaves the card half empty. */
+.sg-table-wrap {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.sg-wrap .sg-table {
+  width: 100%;
+  margin: 0;
+}
+
+.sg-wrap input.regular-text,
+.sg-wrap input.large-text,
+.sg-wrap textarea.large-text {
+  max-width: 100%;
+}
+
+/* Badges ---------------------------------------------------------------- */
+.sg-badge {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.sg-ok {
+  background: rgba(92, 201, 140, 0.14);
+  color: var(--sg-ok);
+}
+
+.sg-warn {
+  background: rgba(230, 180, 90, 0.14);
+  color: var(--sg-warn);
+}
+
+.sg-bad {
+  background: rgba(240, 122, 110, 0.14);
+  color: var(--sg-bad);
+}
+
+.sg-muted {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--sg-muted);
+}
+
+.sg-empty {
+  color: var(--sg-muted);
+  font-style: italic;
+}
+
+.sg-inline {
+  display: inline;
+  margin: 0;
+}
+
+.sg-foot {
+  color: var(--sg-muted);
+  margin-top: 8px;
+}
+
+.sg-actions {
+  margin-top: 4px;
+}
+
+/* Forms ----------------------------------------------------------------- */
+.sg-wrap .form-table th,
+.sg-wrap .form-table td {
+  color: var(--sg-ink);
+}
+
+.sg-wrap .form-table th {
+  font-weight: 600;
+}
+
+.sg-wrap .description,
+.sg-wrap .description p {
+  color: var(--sg-muted);
+}
+
+.sg-wrap input[type="text"],
+.sg-wrap input[type="url"],
+.sg-wrap input[type="search"],
+.sg-wrap input[type="number"],
+.sg-wrap input[type="password"],
+.sg-wrap select,
+.sg-wrap textarea {
+  background: #171b20;
+  border: 1px solid #333b44;
+  border-radius: 7px;
+  color: var(--sg-ink);
+  box-shadow: none;
+}
+
+.sg-wrap input[type="text"]:focus,
+.sg-wrap input[type="url"]:focus,
+.sg-wrap input[type="search"]:focus,
+.sg-wrap input[type="number"]:focus,
+.sg-wrap input[type="password"]:focus,
+.sg-wrap select:focus,
+.sg-wrap textarea:focus {
+  border-color: var(--sg-accent);
+  box-shadow: 0 0 0 1px var(--sg-accent);
+  outline: none;
+}
+
+/* WordPress draws the tick as a white SVG in ::before; invert it on the amber
+   checked state so the mark stays dark instead of vanishing. */
+.sg-wrap input[type="checkbox"] {
+  border: 1px solid #3b444e;
+  background: #171b20;
+  box-shadow: none;
+}
+
+.sg-wrap input[type="checkbox"]:checked {
+  background: var(--sg-accent);
+  border-color: #c9902f;
+}
+
+.sg-wrap input[type="checkbox"]:checked::before {
+  filter: invert(1);
+}
+
+.sg-wrap .button,
+.sg-wrap .button-secondary {
+  background: var(--sg-panel-2);
+  border: 1px solid var(--sg-line);
+  border-radius: 7px;
+  color: var(--sg-ink);
+  text-shadow: none;
+  box-shadow: none;
+}
+
+.sg-wrap .button:hover,
+.sg-wrap .button-secondary:hover {
+  background: #262c33;
+  border-color: #3d4652;
+  color: #fff;
+}
+
+.sg-wrap .button-primary {
+  background: var(--sg-accent);
+  border-color: #c9902f;
+  color: var(--sg-accent-ink);
+  font-weight: 600;
+}
+
+.sg-wrap .button-primary:hover,
+.sg-wrap .button-primary:focus {
+  background: #f0b455;
+  border-color: #d89b34;
+  color: var(--sg-accent-ink);
+}
+
+/* Notices sit inside the dark canvas, so they get their own surface. */
+.sg-wrap .notice {
+  background: var(--sg-panel-2);
+  border: 1px solid var(--sg-line);
+  border-left-width: 4px;
+  border-radius: 8px;
+  color: var(--sg-ink);
+  box-shadow: none;
+}
+
+.sg-wrap .notice p {
+  color: var(--sg-ink);
+}
+
+.sg-wrap .notice-success {
+  border-left-color: var(--sg-ok);
+}
+
+.sg-wrap .notice-warning {
+  border-left-color: var(--sg-warn);
+}
+
+.sg-wrap .notice-error {
+  border-left-color: var(--sg-bad);
+}
+
+.sg-wrap .notice-info {
+  border-left-color: var(--sg-accent);
+}
+
+.sg-wrap .notice-dismiss::before {
+  color: var(--sg-muted);
+}
+
+@media (max-width: 782px) {
+  .sg-wrap {
+    margin-right: 10px;
+    padding: 14px 12px 18px;
+  }
+
+  .sg-site {
+    margin-left: 0;
+  }
+
+  .sg-brand {
+    flex-wrap: wrap;
+  }
+
+  /* Seven date labels collide at phone width; keep every other one, which
+     still brackets the whole window because the last label is always kept. */
+  .sg-xlabel:nth-child(even):not(:last-child) {
+    display: none;
+  }
+
+  .sg-bar {
+    grid-template-columns: minmax(0, 1fr) minmax(44px, 1.4fr) 3.6em;
+  }
+}
+
+/* Tabbed mode ----------------------------------------------------------- */
+/* admin.js adds .sg-tabbed. Until then every section stays visible and the
+   strip above still links to each one, so the page is complete without JS. */
+.sg-tabbed .sg-section {
+  margin: 12px 0 0;
+  padding-top: 0;
+  border-top: 0;
+  scroll-margin-top: 32px;
+}
+
+.sg-tabbed .sg-section[hidden] {
+  display: none !important;
+}
+
+.sg-tabbed .sg-section-title {
+  margin-top: 2px;
+}

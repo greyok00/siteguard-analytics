@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: pdo_sqlite
+
+      - name: Lint plugin sources
+        run: find plugin -name '*.php' -not -path '*/vendor/*' -exec php -l {} \;
+
+      - name: Lint dev and integrations
+        run: find dev integrations -name '*.php' -not -path '*/vendor/*' -exec php -l {} \;
+
+      - name: Run the test suite
+        run: php dev/tests/run.php
