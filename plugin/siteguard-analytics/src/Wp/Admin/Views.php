@@ -42,6 +42,7 @@ final class Views
         $items = [
             ['overview', 'Overview', Caps::VIEW_ANALYTICS],
             [Menu::VISITORS, 'Visitors', Caps::VIEW_ANALYTICS],
+            [Menu::PROFILES, 'Profiles', Caps::VIEW_ANALYTICS],
             [Menu::SECURITY, 'Security', Caps::VIEW_SECURITY],
             [Menu::OPERATIONS, 'Operations', Caps::VIEW_SECURITY],
             [Menu::SETTINGS, 'Settings', Caps::MANAGE_SETTINGS],

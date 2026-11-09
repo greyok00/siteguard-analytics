@@ -31,6 +31,10 @@ final class Settings
             'enabled' => true,
             // Balanced is the shipped profile: enforcement on, baseline limits.
             'profile' => 'balanced',
+            // WAF mode, separate knob from the enforcement profile so turning
+            // the WAF on never flips live rate-limit behaviour. observe is the
+            // shipped default: zero new denials until the owner flips it.
+            'waf_profile' => 'observe',
             'limits' => self::DEFAULT_LIMITS,
             // Distinct-path coverage in a 10-minute window. 0 disables the rule.
             'distinct_window' => 600,
@@ -115,6 +119,14 @@ final class Settings
                 $errors[] = 'profile must be balanced, strict, or observe';
             } else {
                 $clean['profile'] = $profile;
+            }
+        }
+        if (array_key_exists('waf_profile', $input)) {
+            $wafProfile = (string) $input['waf_profile'];
+            if (!in_array($wafProfile, ['off', 'observe', 'balanced', 'strict'], true)) {
+                $errors[] = 'waf_profile must be off, observe, balanced, or strict';
+            } else {
+                $clean['waf_profile'] = $wafProfile;
             }
         }
         if (array_key_exists('enabled', $input)) {

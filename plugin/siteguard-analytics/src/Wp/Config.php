@@ -12,6 +12,7 @@ use SiteGuard\Core\Store\Counters;
 use SiteGuard\Core\Store\Distinct;
 use SiteGuard\Core\Store\Incidents;
 use SiteGuard\Core\SystemClock;
+use SiteGuard\Core\Waf\Gate;
 use SiteGuard\Wp\Store\WpdbBlockStore;
 use SiteGuard\Wp\Store\WpdbCounterStore;
 use SiteGuard\Wp\Store\WpdbDistinctStore;
@@ -30,6 +31,7 @@ final class Config
     private static ?Blocks $blocks = null;
     private static ?Incidents $incidents = null;
     private static ?Enforcer $enforcer = null;
+    private static ?Gate $wafGate = null;
 
     public static function settings(): array
     {
@@ -45,6 +47,7 @@ final class Config
     {
         self::$settings = null;
         self::$enforcer = null;
+        self::$wafGate = null;
     }
 
     public static function policy(): Policy
@@ -101,6 +104,21 @@ final class Config
             );
         }
         return self::$enforcer;
+    }
+
+    public static function wafGate(): Gate
+    {
+        if (self::$wafGate === null) {
+            $settings = self::settings();
+            self::$wafGate = new Gate(
+                (string) ($settings['waf_profile'] ?? 'observe'),
+                new Policy($settings),
+                self::incidents(),
+                self::blocks(),
+                self::clock()
+            );
+        }
+        return self::$wafGate;
     }
 
     /**

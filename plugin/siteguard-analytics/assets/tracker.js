@@ -297,12 +297,24 @@
     };
   }
 
+  // Sends to the REST collector first. A network error OR a non-OK response
+  // (a host kill switch answers 403, not a network failure) retries against
+  // the admin-ajax fallback, which no REST kill switch blocks.
   function send(type) {
     var body = JSON.stringify(payload(type));
-    var url = cfg.endpoint;
+    deliver(cfg.endpoint, body, function (ok) {
+      if (!ok && cfg.fallback) {
+        deliver(cfg.fallback, body, function () {});
+      }
+    });
+  }
+
+  function deliver(url, body, done) {
     if (navigator.sendBeacon) {
       var blob = new Blob([body], { type: 'application/json' });
       if (navigator.sendBeacon(url, blob)) {
+        // sendBeacon gives no status back; treat queueing as success.
+        done(true);
         return;
       }
     }
@@ -313,8 +325,14 @@
         headers: { 'Content-Type': 'application/json' },
         credentials: 'same-origin',
         keepalive: true
-      }).catch(function () {});
+      }).then(function (response) {
+        done(Boolean(response && response.ok));
+      }, function () {
+        done(false);
+      });
+      return;
     }
+    done(false);
   }
 
   var sent = false;

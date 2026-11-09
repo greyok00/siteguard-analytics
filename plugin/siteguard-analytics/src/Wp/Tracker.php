@@ -41,6 +41,9 @@ final class Tracker
             'siteguard-tracker',
             'window.SiteGuardConfig=' . wp_json_encode([
                 'endpoint' => esc_url_raw(rest_url('siteguard/v1/collect')),
+                // Some hosts disable anonymous REST access site-wide; admin-ajax
+                // keeps working there, so the tracker retries its POST here.
+                'fallback' => esc_url_raw(admin_url('admin-ajax.php?action=siteguard_collect')),
                 'consent' => $consent,
                 'sample' => 100,
             ]) . ';',

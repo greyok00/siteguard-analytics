@@ -24,6 +24,7 @@ final class Page
 
         Overview::section();
         Visitors::section();
+        Profiles::section();
         Security::section();
         Operations::section();
         SettingsPage::section();

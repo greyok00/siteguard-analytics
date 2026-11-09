@@ -39,6 +39,11 @@ final class Beacon
     public static function boot(): void
     {
         add_action('rest_api_init', [self::class, 'routes']);
+        // The admin-ajax twin of the REST route: some hosts block anonymous
+        // REST access site-wide before any permission callback runs, so the
+        // tracker falls back to this transport when the REST path fails.
+        add_action('wp_ajax_siteguard_collect', [self::class, 'ajax']);
+        add_action('wp_ajax_nositeguard_collect', [self::class, 'ajax']);
     }
 
     public static function routes(): void
@@ -57,35 +62,69 @@ final class Beacon
         $response = new \WP_REST_Response(null, 204);
         $response->header('Cache-Control', 'no-store, no-cache, must-revalidate');
 
-        $settings = Config::settings();
-        if (empty($settings['collect']) || !Installer::ready()) {
-            return $response;
-        }
-
         $data = $request->get_json_params();
         if (!is_array($data)) {
             $raw = $request->get_body();
             $decoded = json_decode((string) $raw, true);
             $data = is_array($decoded) ? $decoded : [];
         }
+        self::ingest(is_array($data) ? $data : []);
+        return $response;
+    }
+
+    /**
+     * The admin-ajax transport. Answers 204 like the REST route in every case:
+     * validation failures stay silent so a broken payload cannot turn into a
+     * javascript console error on the visitor's page.
+     */
+    public static function ajax(): void
+    {
+        nocache_headers();
+        status_header(204);
+        $raw = (string) @file_get_contents('php://input');
+        $decoded = json_decode($raw, true);
+        if (is_array($decoded)) {
+            self::ingest($decoded);
+        }
+        exit;
+    }
+
+    /**
+     * The single ingestion path behind both transports. Every rejection is a
+     * quiet no-op: the collector never leaks why it dropped a payload.
+     * @param array<string,mixed> $data
+     */
+    private static function ingest(array $data): void
+    {
+        $settings = Config::settings();
+        if (empty($settings['collect']) || !Installer::ready()) {
+            return;
+        }
+
+        // The diagnostics self-check sends this flag and expects nothing to be
+        // stored; it only needs to prove the request reached the plugin.
+        if (isset($data['probe'])) {
+            return;
+        }
+
         if (!$data) {
-            return $response;
+            return;
         }
 
         $visitor = isset($data['visitor']) && is_string($data['visitor']) ? $data['visitor'] : '';
         $session = isset($data['session']) && is_string($data['session']) ? $data['session'] : '';
         if (!Crypto::isId($visitor) || !Crypto::isId($session)) {
-            return $response;
+            return;
         }
 
         $type = isset($data['type']) && is_string($data['type']) ? $data['type'] : '';
         if (!in_array($type, self::TYPES, true)) {
-            return $response;
+            return;
         }
 
         $path = self::path($data['path'] ?? '');
         if ($path === '') {
-            return $response;
+            return;
         }
         $referrer = self::referrer($data['referrer'] ?? '');
 
@@ -144,7 +183,7 @@ final class Beacon
 
         // A duplicate within the same minute is a replay, not a pageview.
         if ($inserted < 1) {
-            return $response;
+            return;
         }
 
         $people = new WpdbPeopleStore($GLOBALS['wpdb']);
@@ -176,8 +215,6 @@ final class Beacon
         if (!$isView) {
             $people->closeSession($session, $path, time());
         }
-
-        return $response;
     }
 
     /**

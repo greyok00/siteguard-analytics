@@ -155,6 +155,14 @@ final class Guard
     private static function decide(\SiteGuard\Core\RequestContext $ctx): ?Decision
     {
         try {
+            // The WAF is the first detection stage inside the same pipeline:
+            // content/tool signatures first, rate limits second. Both answer
+            // with the same Decision vocabulary; a WAF denial short-circuits.
+            $extra = self::requestExtra($ctx);
+            $wafDecision = Config::wafGate()->check($ctx, $extra);
+            if ($wafDecision->denied()) {
+                return $wafDecision;
+            }
             return Config::enforcer()->check($ctx);
         } catch (\Throwable $e) {
             // Fail open: a storage fault must not take the site down. The
@@ -165,6 +173,25 @@ final class Guard
             ], false);
             return null;
         }
+    }
+
+    /**
+     * Surfaces for the WAF beyond the request context itself: the raw body
+     * (capped, POST/PUT only) and the user agent. A short capped read keeps
+     * the inspector's cost bounded on large uploads.
+     *
+     * @return array{body?:string|array<string,mixed>,headers?:array<string,string>}
+     */
+    private static function requestExtra(\SiteGuard\Core\RequestContext $ctx): array
+    {
+        $extra = ['headers' => ['user-agent' => $ctx->userAgent]];
+        if (in_array($ctx->method, ['POST', 'PUT'], true)) {
+            $raw = @file_get_contents('php://input');
+            if (is_string($raw) && $raw !== '') {
+                $extra['body'] = substr($raw, 0, 8192);
+            }
+        }
+        return $extra;
     }
 
     private static function denyFront(Decision $decision): void

@@ -311,7 +311,7 @@ final class Visitors
         return add_query_arg('page', Menu::OVERVIEW, admin_url('admin.php')) . '#visitors';
     }
 
-    private static function detailUrl(string $id): string
+    public static function detailUrl(string $id): string
     {
         return wp_nonce_url(
             add_query_arg(
@@ -328,7 +328,7 @@ final class Visitors
         return $ts ? wp_date('M j, Y H:i', $ts) : '—';
     }
 
-    private static function when(string $utc): string
+    public static function when(string $utc): string
     {
         $ts = strtotime($utc . ' UTC');
         if (!$ts) {

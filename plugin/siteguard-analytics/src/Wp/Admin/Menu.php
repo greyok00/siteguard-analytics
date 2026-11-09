@@ -20,6 +20,7 @@ final class Menu
 
     /** Section anchors on the single page. */
     public const VISITORS = 'visitors';
+    public const PROFILES = 'profiles';
     public const SECURITY = 'security';
     public const OPERATIONS = 'operations';
     public const SETTINGS = 'settings';

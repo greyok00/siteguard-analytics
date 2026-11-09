@@ -8,6 +8,7 @@ use SiteGuard\Wp\Caps;
 use SiteGuard\Wp\Config;
 use SiteGuard\Wp\Installer;
 use SiteGuard\Wp\Store\WpdbAuditStore;
+use SiteGuard\Wp\Store\WpdbEventStore;
 
 /**
  * The Operations section: the coverage matrix, diagnostics, CSV and JSON
@@ -26,6 +27,7 @@ final class Operations
         $lastError = get_option('siteguard_last_error');
         $lastRetention = get_option('siteguard_last_retention');
         $audit = (new WpdbAuditStore($GLOBALS['wpdb']))->recent(40, 0);
+        $browserEvents = (new WpdbEventStore($GLOBALS['wpdb']))->countSince(time() - 86400, 'browser');
 
         Views::openSection('operations');
         Views::sectionTitle('Operations', 'What is protected, what is not, and what the plugin has been doing.');
@@ -67,6 +69,14 @@ final class Operations
                 : esc_html('not yet run')],
             ['Trusted proxies', esc_html(($settings['trusted_proxies'] ?? '') !== '' ? $settings['trusted_proxies'] : 'none configured')],
             ['IP storage', esc_html((string) $settings['ip_storage'])],
+            // Browser rows in the events table are written only by the
+            // collector, so a count above zero is the end-to-end proof that
+            // real visitor beacons reach the database.
+            ['Browser events (last 24h)', esc_html(sprintf('%d', $browserEvents))],
+            ...array_map(
+                static fn (array $r): array => [$r[0], esc_html((string) $r[1])],
+                CollectorProbe::report()
+            ),
         ];
         Views::table(['Check', 'Value'], array_map(
             static fn (array $r): array => [esc_html($r[0]), $r[1]],
