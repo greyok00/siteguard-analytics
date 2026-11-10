@@ -181,4 +181,78 @@ final class ProfileFingerprintTest extends TestCase
         ]);
         $this->assertSame(['clean' => 1, 'flagged' => 3, 'unknown' => 2], $stable);
     }
+
+    public function testHitsMapReasonSeveritiesOntoWafInput(): void
+    {
+        $hits = Fingerprint::hits(['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0']);
+        $this->assertCount(1, $hits, 'one impossible hint, one hit.');
+        $this->assertSame('fp-touchless-ios', $hits[0]['rule'], 'the rule names the reason verbatim so the incident shows its cause.');
+        $this->assertSame(
+            \SiteGuard\Core\Waf\Rules::GROUP_PROFILE, $hits[0]['group'],
+            'profile lies form their own group in the corpus vocabulary.'
+        );
+        $this->assertSame(4, $hits[0]['severity'], 'a touch-free phone contradicts the family itself: severity 4.');
+        $this->assertSame('touchless-ios', $hits[0]['evidence'], 'evidence stays the machine-named reason.');
+
+        // the mid bar: a Chromium-only tier contradicted, and a timezone lie
+        $this->assertSame(3, Fingerprint::hits(['platform' => 'Win32', 'mem' => '7'])[0]['severity']);
+        $this->assertSame(3, Fingerprint::hits(['platform' => 'Win32', 'cores' => '999'])[0]['severity']);
+        $this->assertSame(3, Fingerprint::hits(['tz' => 'America/New_York', 'tz_offset' => '330'])[0]['severity']);
+        // junk sits at the bottom, not beside demonstrated lies
+        $this->assertSame(1, Fingerprint::hits(['tz' => 'America/New_York', 'tz_offset' => 'abc'])[0]['severity']);
+    }
+
+    public function testHitsAreEmptyForCleanAndEmptyProfiles(): void
+    {
+        $this->assertSame([], Fingerprint::hits([]), 'an empty profile scores nothing.');
+        $this->assertSame([], Fingerprint::hits(['platform' => 'Win32', 'ua_platform' => 'Windows', 'ua_mobile' => '0', 'touch' => '0', 'screen' => '1920x1080']),
+            'an honest desktop is clean even with zero touch points.');
+        $this->assertSame([], Fingerprint::hits(['tz' => 'America/New_York', 'tz_offset' => '300']));
+    }
+
+    public function testMultipleDeviceLiesProduceMultipleHits(): void
+    {
+        $hits = Fingerprint::hits([
+            'platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1',
+            'touch' => '0', 'screen' => '2048x1536', 'mem' => '7', 'tz' => 'America/New_York', 'tz_offset' => '330',
+        ]);
+        $rules = array_map(static fn (array $hit): string => $hit['rule'], $hits);
+        $this->assertSame(['fp-touchless-ios', 'fp-desktop-screen-ios', 'fp-memory-off-scale', 'fp-timezone-offset-mismatch'], $rules,
+            'every impossibility becomes its own scoring hit, in impossibles() order.');
+    }
+
+    public function testHitsNeverThrowOnJunkProfiles(): void
+    {
+        $hits = Fingerprint::hits(['platform' => 123, 'screen' => true, 'tz' => [], 'tz_offset' => 'x' . "\x80"]);
+        $this->assertTrue(count($hits) <= 1, 'junk values read as silence or one low hit, never a crash.');
+        foreach ($hits as $hit) {
+            $this->assertTrue($hit['severity'] <= 1, 'junk that does score stays at the bottom bar.');
+            $this->assertSame(\SiteGuard\Core\Waf\Rules::GROUP_PROFILE, $hit['group']);
+        }
+    }
+
+    public function testVerdictBandsMatchAutomationBands(): void
+    {
+        $profiles = [
+            ['platform' => 'Win32', 'ua_platform' => 'Windows', 'ua_mobile' => '0'],
+            ['platform' => 'MacIntel', 'ua_platform' => 'Windows'],
+            ['webgl_vendor' => 'SwiftShader'],
+            ['platform' => 'Win32', 'mem' => '7'],
+            ['platform' => 'Win32', 'touch' => '0'],
+            [],
+        ];
+        $bands = Fingerprint::automationBands($profiles);
+        $per = ['clean' => 0, 'flagged' => 0, 'unknown' => 0];
+        foreach ($profiles as $profile) {
+            $per[Fingerprint::verdict($profile)]++;
+        }
+        $this->assertSame($bands, $per, 'verdict() is the one-profile law automationBands() counts.');
+    }
+
+    public function testProfileGroupCountsAsAProbeHit(): void
+    {
+        $hit = Fingerprint::hits(['platform' => 'iPhone', 'ua_mobile' => '1', 'touch' => '0']);
+        $this->assertTrue(\SiteGuard\Core\Waf\Inspector::hasProbeHit($hit),
+            'a device lie IS an application signal: it satisfies the probe-partner law on its own.');
+    }
 }

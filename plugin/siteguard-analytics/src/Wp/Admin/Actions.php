@@ -44,7 +44,9 @@ final class Actions
 
         update_option(Settings::OPTION, $clean);
         Config::forget();
-        self::audit('settings.saved', 'settings', ['profile' => $clean['profile']]);
+        delete_transient(WafProbe::cacheKey());
+        delete_transient('siteguard_collector_probe');
+        self::audit('settings.saved', 'settings', ['profile' => $clean['profile'], 'waf_profile' => $clean['waf_profile']]);
         Menu::redirect(Menu::SETTINGS, 'Settings saved.');
     }
 

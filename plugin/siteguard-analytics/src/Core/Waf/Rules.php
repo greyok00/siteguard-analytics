@@ -16,6 +16,8 @@ final class Rules
     public const GROUP_WP = 'wp-abuse';
     public const GROUP_SCANNER = 'scanner';
     public const GROUP_ANOMALY = 'anomaly';
+    /** Stored browser-fingerprint contradictions (Fingerprint::hits), not pattern matches. */
+    public const GROUP_PROFILE = 'profile';
 
     public const SEVERITY_LOW = 1;
     public const SEVERITY_MEDIUM = 3;
@@ -206,5 +208,30 @@ final class Rules
             $out[] = ['rule' => $rule, 'group' => $group, 'severity' => $severity, 'pattern' => $pattern];
         }
         return $out;
+    }
+
+    /**
+     * The group for one rule id, for incident chips and probes. Fingerprint
+     * rules ("fp-*") belong to the profile group without being patterns;
+     * rate-limit rows (rate_10s, breadth_600s) and anything unknown answer
+     * their plain families rather than a corpus group.
+     */
+    public static function groupOf(string $rule): string
+    {
+        if ($rule === '') {
+            return '';
+        }
+        if (str_starts_with($rule, 'fp-')) {
+            return self::GROUP_PROFILE;
+        }
+        foreach (self::all() as $entry) {
+            if ($entry['rule'] === $rule) {
+                return $entry['group'];
+            }
+        }
+        if (str_starts_with($rule, 'rate_') || str_starts_with($rule, 'breadth_')) {
+            return 'rate';
+        }
+        return '';
     }
 }

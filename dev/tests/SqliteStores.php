@@ -8,6 +8,7 @@ use SiteGuard\Core\Store\Blocks;
 use SiteGuard\Core\Store\Counters;
 use SiteGuard\Core\Store\Distinct;
 use SiteGuard\Core\Store\Incidents;
+use SiteGuard\Core\Store\People;
 
 /**
  * SQLite implementations used only by the test suite. They mirror the SQL
@@ -35,6 +36,8 @@ final class SqliteDb
             id INTEGER PRIMARY KEY AUTOINCREMENT, ts INTEGER NOT NULL, subject TEXT NOT NULL,
             rule TEXT NOT NULL, severity TEXT NOT NULL, evidence TEXT,
             request_count INTEGER NOT NULL, block_id INTEGER NOT NULL)');
+        $this->pdo->exec('CREATE TABLE people (
+            id TEXT PRIMARY KEY, profile TEXT NULL)');
     }
 }
 
@@ -272,6 +275,66 @@ final class SqliteIncidents implements Incidents
         );
         $stmt->execute([':s' => $subject, ':since' => $since]);
         return (int) $stmt->fetchColumn();
+    }
+
+    public function pruneBefore(int $before): int
+    {
+        return 0;
+    }
+}
+
+/**
+ * Visitor rows for the profile consult: id → stored profile JSON, decoded on
+ * read. Mirrors WpdbPeopleStore::profileFor semantics — malformed JSON and
+ * unknown ids both answer [] so the gate treats absence as clean.
+ */
+final class SqlitePeople implements People
+{
+    public function __construct(private PDO $pdo)
+    {
+    }
+
+    /** Writes the profile column directly; the only fields the gate reads. */
+    public function setProfile(string $visitorId, array $profile): void
+    {
+        $stmt = $this->pdo->prepare(
+            'INSERT INTO people (id, profile) VALUES (:id, :profile)
+             ON CONFLICT(id) DO UPDATE SET profile = excluded.profile'
+        );
+        $stmt->execute([':id' => $visitorId, ':profile' => $profile === [] ? null : json_encode($profile)]);
+    }
+
+    public function profileFor(string $visitorId): array
+    {
+        $stmt = $this->pdo->prepare('SELECT profile FROM people WHERE id = :id');
+        $stmt->execute([':id' => $visitorId]);
+        $json = $stmt->fetchColumn();
+        if ($json === false || $json === null || (string) $json === '') {
+            return [];
+        }
+        $decoded = json_decode((string) $json, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    public function touchSession(string $sessionId, array $meta, int $now, bool $newPageview): void
+    {
+    }
+
+    public function closeSession(string $sessionId, string $exitPath, int $now): void
+    {
+    }
+
+    public function touchVisitor(string $visitorId, int $now, bool $newSession, bool $newPageview, array $meta = []): void
+    {
+    }
+
+    public function countSessions(int $since, int $until): int
+    {
+        return 0;
+    }
+
+    public function linkIdentity(string $visitorId, int $accountId, int $now): void
+    {
     }
 
     public function pruneBefore(int $before): int

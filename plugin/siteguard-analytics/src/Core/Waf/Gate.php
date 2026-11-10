@@ -8,8 +8,10 @@ use SiteGuard\Core\Decision;
 use SiteGuard\Core\Policy;
 use SiteGuard\Core\RequestContext;
 use SiteGuard\Core\Subjects;
+use SiteGuard\Core\Profile\Fingerprint;
 use SiteGuard\Core\Store\Blocks;
 use SiteGuard\Core\Store\Incidents;
+use SiteGuard\Core\Store\People;
 
 /**
  * Content-level attack gate: the SECOND detection stage of the pipeline, run
@@ -42,7 +44,9 @@ final class Gate
         private Policy $policy,
         private Incidents $incidents,
         private Blocks $blocks,
-        private Clock $clock
+        private Clock $clock,
+        private People $profiles,
+        private bool $deviceHints = true
     ) {
     }
 
@@ -75,6 +79,18 @@ final class Gate
             'body' => $extra['body'] ?? [],
             'headers' => $extra['headers'] ?? ['user-agent' => $ctx->userAgent],
         ]);
+
+        // Stored fingerprint evidence: has THIS browser reported hints no real
+        // device of its family ships with? The profile was written by the
+        // beacon on an earlier pageview, so a first-ever request carries no
+        // profile hits yet — enforcement starts with the second visit, which
+        // is exactly when a returning automation client matters. The hits
+        // score like any content signature; the BLOCK still lands on the
+        // network address (blockableSubject below), never the visitor id.
+        if ($this->deviceHints && $ctx->visitorId !== '') {
+            $hits = array_merge($hits, Fingerprint::hits($this->profiles->profileFor($ctx->visitorId)));
+        }
+
         if (!$hits) {
             return Decision::allow();
         }
@@ -95,6 +111,11 @@ final class Gate
             ? [self::STRICT_MAX_SEVERITY, self::STRICT_SCORE]
             : [self::BALANCED_MAX_SEVERITY, self::BALANCED_SCORE];
         $crossed = $maxSeverity >= $thresholds[0] || $score >= $thresholds[1];
+        // The thresholds live next to the score: every incident row shows what
+        // bar it was judged against at write time, so a later mode change
+        // never restates history.
+        $evidence['bar_severity'] = $thresholds[0];
+        $evidence['bar_score'] = $thresholds[1];
 
         $subject = $this->blockableSubject($ctx);
         // Signed-in non-admins are never denied by content rules, so checkout
@@ -107,7 +128,10 @@ final class Gate
         if ($crossed || $this->mode === 'observe') {
             return Decision::observe($rule, $subject !== '' ? 'ip' : 'unattributable', $evidence);
         }
-        return Decision::allow(['waf' => 'below_threshold']);
+        // Below the bar: allowed, but the fired rules ride along so the
+        // self-test can report "detected, below the threshold" instead of
+        // guessing from the outside.
+        return Decision::allow(['waf' => 'below_threshold'] + $evidence);
     }
 
     /**
@@ -191,7 +215,7 @@ final class Gate
             $now + $duration
         );
         $this->incidents->record($subject, $rule, self::name($maxSeverity), $evidence, 1, $blockId, $now);
-        return Decision::block($duration, $rule, $scope, ['subject' => $subject, 'block_id' => $blockId]);
+        return Decision::block($duration, $rule, $scope, ['subject' => $subject, 'block_id' => $blockId] + $evidence);
     }
 
     private function record(string $subject, string $rule, int $maxSeverity, array $evidence): void

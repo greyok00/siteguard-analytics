@@ -32,6 +32,10 @@ final class Cli
         }
         \WP_CLI::log('Schema: ' . get_option(Installer::SCHEMA_OPTION, '0'));
         \WP_CLI::log('Profile: ' . $profile);
+        $policy = Config::policy();
+        \WP_CLI::log('WAF: ' . $policy->wafMode()
+            . ' (' . count(\SiteGuard\Core\Waf\Rules::all()) . ' rules, device hints '
+            . ($policy->deviceHintsEnforced() ? 'armed' : 'off') . ')');
         \WP_CLI::log('Enforcement: ' . (Config::emergencyOff() ? 'stopped' : 'on'));
         \WP_CLI::log('Active blocks: ' . $blocks);
         \WP_CLI::log('Missing tables: ' . ($missing ? implode(', ', $missing) : 'none'));

@@ -11,12 +11,14 @@ use SiteGuard\Core\Store\Blocks;
 use SiteGuard\Core\Store\Counters;
 use SiteGuard\Core\Store\Distinct;
 use SiteGuard\Core\Store\Incidents;
+use SiteGuard\Core\Store\People;
 use SiteGuard\Core\SystemClock;
 use SiteGuard\Core\Waf\Gate;
 use SiteGuard\Wp\Store\WpdbBlockStore;
 use SiteGuard\Wp\Store\WpdbCounterStore;
 use SiteGuard\Wp\Store\WpdbDistinctStore;
 use SiteGuard\Wp\Store\WpdbIncidentStore;
+use SiteGuard\Wp\Store\WpdbPeopleStore;
 
 /**
  * Lazily built services shared by the request path and the admin screens.
@@ -30,6 +32,7 @@ final class Config
     private static ?Distinct $distinct = null;
     private static ?Blocks $blocks = null;
     private static ?Incidents $incidents = null;
+    private static ?People $people = null;
     private static ?Enforcer $enforcer = null;
     private static ?Gate $wafGate = null;
 
@@ -91,6 +94,11 @@ final class Config
         return self::$incidents ??= new WpdbIncidentStore($GLOBALS['wpdb']);
     }
 
+    public static function people(): People
+    {
+        return self::$people ??= new WpdbPeopleStore($GLOBALS['wpdb']);
+    }
+
     public static function enforcer(): Enforcer
     {
         if (self::$enforcer === null) {
@@ -110,12 +118,15 @@ final class Config
     {
         if (self::$wafGate === null) {
             $settings = self::settings();
+            $policy = new Policy($settings);
             self::$wafGate = new Gate(
-                (string) ($settings['waf_profile'] ?? 'observe'),
-                new Policy($settings),
+                $policy->wafMode(),
+                $policy,
                 self::incidents(),
                 self::blocks(),
-                self::clock()
+                self::clock(),
+                self::people(),
+                $policy->deviceHintsEnforced()
             );
         }
         return self::$wafGate;

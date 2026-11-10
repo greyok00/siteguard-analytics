@@ -45,6 +45,29 @@ final class SettingsPage
         echo '<label><input type="checkbox" name="enabled" value="1"' . checked((bool) $s['enabled'], true, false) . '> Apply rules to visitor requests</label>';
         echo '<p class="description">Turning this off keeps collection and history running but never denies a request.</p></td></tr>';
 
+        echo '<tr><th scope="row"><label for="sg-waf-profile">Content rules (WAF)</label></th><td>';
+        echo '<select name="waf_profile" id="sg-waf-profile">';
+        foreach ([
+            'balanced' => 'Balanced — inspect and deny attack signatures (recommended)',
+            'strict' => 'Strict — same rule set, halved thresholds',
+            'observe' => 'Observe — record every hit, deny nothing',
+            'off' => 'Off — no content inspection',
+        ] as $value => $label) {
+            echo '<option value="' . esc_attr($value) . '"' . selected($s['waf_profile'], $value, false) . '>'
+                . esc_html($label) . '</option>';
+        }
+        echo '</select><p class="description">The WAF scores request content and stored fingerprint evidence against the rule corpus; '
+            . 'a crossed threshold blocks the network address on the same ladder as the rate limiter. The Security section can '
+            . 'self-test the corpus at any time.</p></td></tr>';
+
+        echo '<tr><th scope="row">Device-hint enforcement</th><td>';
+        echo '<input type="hidden" name="waf_device_hints" value="0">';
+        echo '<label><input type="checkbox" name="waf_device_hints" value="1"' . checked((bool) $s['waf_device_hints'], true, false) . '> '
+            . 'Arm impossible device hints</label>';
+        echo '<p class="description">When a browser reports hardware its claimed family never ships with (a touch-free phone, a '
+            . '2000px-wide iPhone, an off-scale memory tier), the report scores as an attack signature. The browser id is never '
+            . 'blocked — the network address behind the request is, on the shared ladder.</p></td></tr>';
+
         echo '<tr><th scope="row">Collection</th><td>';
         echo '<input type="hidden" name="collect" value="0">';
         echo '<label><input type="checkbox" name="collect" value="1"' . checked((bool) $s['collect'], true, false) . '> Load the first-party collector on the front end</label>';

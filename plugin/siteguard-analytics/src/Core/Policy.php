@@ -37,6 +37,19 @@ final class Policy
         return (bool) ($this->settings['enabled'] ?? true);
     }
 
+    /** The WAF mode knob, validated to the four shipped values. */
+    public function wafMode(): string
+    {
+        $mode = (string) ($this->settings['waf_profile'] ?? 'balanced');
+        return in_array($mode, ['off', 'observe', 'balanced', 'strict'], true) ? $mode : 'balanced';
+    }
+
+    /** Whether impossible-device-hint profiles feed the WAF score. */
+    public function deviceHintsEnforced(): bool
+    {
+        return (bool) ($this->settings['waf_device_hints'] ?? true);
+    }
+
     /**
      * Rules for a class as [windowSeconds, limit] pairs, already scaled for
      * the profile and for a signed-in account.

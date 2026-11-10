@@ -187,6 +187,58 @@ final class Views
         return '<span class="sg-badge sg-' . esc_attr($class) . '">' . esc_html($status) . '</span>';
     }
 
+    /**
+     * A verdict chip for one browser fingerprint: clean / flagged / unknown,
+     * with flagged tinted and unknown muted. Used in the Visitors verdict
+     * column and the visitor drawer.
+     */
+    public static function verdictChip(string $verdict): string
+    {
+        $class = match ($verdict) {
+            'clean' => 'ok',
+            'flagged' => 'warn',
+            default => 'muted',
+        };
+        return '<span class="sg-badge sg-verdict sg-' . esc_attr($class) . '">' . esc_html($verdict) . '</span>';
+    }
+
+    /**
+     * A group chip for an incident's rule family. sqli/rce/profile are the
+     * hard families (bad), xss/wp sit one bar down (warn), scanner/anomaly
+     * rate rows are informational (muted/info).
+     */
+    public static function groupChip(string $rule): string
+    {
+        $tone = match (\SiteGuard\Core\Waf\Rules::groupOf($rule)) {
+            'sqli', 'rce-lfi', 'profile' => 'bad',
+            'xss', 'wp-abuse' => 'warn',
+            'rate' => 'info',
+            default => 'muted',
+        };
+        $group = \SiteGuard\Core\Waf\Rules::groupOf($rule);
+        $label = $group === '' ? 'other' : $group;
+        return '<span class="sg-badge sg-' . esc_attr($tone) . '">' . esc_html($label) . '</span>';
+    }
+
+    /**
+     * The armed protection row: a lamp plus one sentence. The lamp tone is
+     * the state an owner needs at a glance; the sentence is the plain truth
+     * about what the mode does.
+     */
+    public static function armRow(string $tone, string $message): void
+    {
+        echo '<div class="sg-arm-row">';
+        echo '<span class="sg-lamp is-' . esc_attr($tone) . '" aria-hidden="true"></span>';
+        echo '<span class="sg-arm-text">' . esc_html($message) . '</span>';
+        echo '</div>';
+    }
+
+    /** The one-line self-test summary under the WAT table (or a notice). */
+    public static function probeStamp(string $stamp, string $tone = 'muted'): void
+    {
+        echo '<p class="sg-probe-stamp sg-lamp-text-' . esc_attr($tone) . '">' . esc_html($stamp) . '</p>';
+    }
+
     public static function notice(string $message, string $type = 'success'): void
     {
         echo '<div class="notice notice-' . esc_attr($type) . ' is-dismissible"><p>'
@@ -458,6 +510,21 @@ final class Views
                 'Verified means the hook is exercised in this install. Partial means some endpoints of that type '
                 . 'are deliberately exempt. Unavailable means WordPress is not reached. Untested means the hook '
                 . 'exists but this installation has not exercised it yet.',
+            'What is the WAF mode?' =>
+                'Content rules inspect request payloads and stored fingerprint evidence and score them against '
+                . 'the rule corpus. Balanced denies a single high-severity probe; strict halves the bar; observe '
+                . 'records every hit and denies nothing; off inspects nothing. The mode lives in Settings, and the '
+                . 'Security section states it plainly at all times.',
+            'What does the self-test do?' =>
+                'The Security section fires seven harmless documented payloads (six attack shapes plus a benign '
+                . 'control) through the same gate live traffic meets, against throwaway storage. It proves the '
+                . 'corpus is alive in this install; it writes nothing into the incident or block tables.',
+            'Why did a device-hint hit block me?' =>
+                'When device-hint enforcement is armed, a browser that reports hardware its claimed family never '
+                . 'ships with (a touch-free phone, a 2000px-wide iPhone, an off-scale memory tier) scores as an '
+                . 'attack signature. The block always lands on the network address on the shared ladder — never on '
+                . 'the browser id — and it expires like every other block. If your network shares one address '
+                . '(office NAT) and one device on it runs automation, lift the block or disarm the layer in Settings.',
         ];
 
         self::openSection('faq');

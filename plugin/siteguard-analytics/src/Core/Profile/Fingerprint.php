@@ -23,6 +23,29 @@ final class Fingerprint
     public const DEVICE_HINTS = ['screen', 'touch', 'cores', 'mem', 'tz', 'tz_offset'];
 
     /**
+     * How strongly each impossible-device-hint reason scores inside the WAF.
+     * The ranking follows the false-positive posture of each family: a
+     * contradiction against the claimed device family itself (a touch-free
+     * phone, a 2000px-wide iPhone) is the tightest evidence, so it sits at
+     * the same severity as unambiguous attack probes; off-scale memory and
+     * core tiers sit one bar lower because the tiers are Chromium's enum and
+     * tampered clients fudge them; an unparseable timezone offset is junk,
+     * not a demonstrated lie, and stays at the bottom. Reasons missing from
+     * this map score nothing: a new reason must be classified here before it
+     * can ever deny anything.
+     * @var array<string,int>
+     */
+    private const HIT_SEVERITY = [
+        'touchless-ios' => 4,
+        'desktop-screen-ios' => 4,
+        'touchless-android' => 4,
+        'timezone-offset-mismatch' => 3,
+        'memory-off-scale' => 3,
+        'cores-implausible' => 3,
+        'timezone-offset-unparseable' => 1,
+    ];
+
+    /**
      * One profile onto one platform family, first match wins. The two hints
      * are read together because real browsers phrase the same fact different
      * ways: 'Win32' + 'Windows', 'MacIntel' + 'macOS', 'Linux x86_64 Android'
@@ -196,6 +219,53 @@ final class Fingerprint
     }
 
     /**
+     * The impossible-device-hint reasons as WAF-scoring input: same shape the
+     * Inspector returns for pattern hits, so a profile lie and a payload
+     * signature score through one path in Gate. The rule id carries the
+     * reason verbatim ("fp-touchless-ios") so every incident names its cause.
+     * Severities come from HIT_SEVERITY; reasons missing from that map are
+     * skipped, not guessed. A clean or empty profile scores nothing.
+     * @param array<string,mixed> $profile
+     * @return list<array{rule:string,group:string,severity:int,evidence:string}>
+     */
+    public static function hits(array $profile): array
+    {
+        $hits = [];
+        foreach (self::impossibles($profile) as $reason) {
+            $severity = self::HIT_SEVERITY[$reason] ?? 0;
+            if ($severity === 0) {
+                continue;
+            }
+            $hits[] = [
+                'rule' => 'fp-' . $reason,
+                'group' => \SiteGuard\Core\Waf\Rules::GROUP_PROFILE,
+                'severity' => $severity,
+                'evidence' => $reason,
+            ];
+        }
+        return $hits;
+    }
+
+    /**
+     * One verdict for one profile: 'flagged' carries at least one automation
+     * signal (self-disagreement, a software renderer, or a device hint no
+     * real device of that family ships with), 'clean' reported signals with
+     * none of those, 'unknown' an empty or malformed row that proves nothing
+     * either way. automationBands() counts these; keep the two laws together.
+     * @param array<string,mixed> $profile
+     * @return string clean|flagged|unknown
+     */
+    public static function verdict(array $profile): string
+    {
+        if ($profile === []) {
+            return 'unknown';
+        }
+        $flagged = self::conflicts($profile) !== [] || self::headlessReasons($profile) !== []
+            || self::impossibles($profile) !== [];
+        return $flagged ? 'flagged' : 'clean';
+    }
+
+    /**
      * True when the PHP-side offset for a zone equals the claimed seconds
      * east at the current time or at either half-year probe. A zone that
      * cannot be probed resolves to null and its profile is skipped silently
@@ -232,13 +302,7 @@ final class Fingerprint
     {
         $bands = ['clean' => 0, 'flagged' => 0, 'unknown' => 0];
         foreach ($profiles as $profile) {
-            if (!is_array($profile) || $profile === []) {
-                $bands['unknown']++;
-                continue;
-            }
-            $flagged = self::conflicts($profile) !== [] || self::headlessReasons($profile) !== []
-                || self::impossibles($profile) !== [];
-            $bands[$flagged ? 'flagged' : 'clean']++;
+            $bands[is_array($profile) ? self::verdict($profile) : 'unknown']++;
         }
         return $bands;
     }

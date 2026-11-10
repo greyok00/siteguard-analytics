@@ -17,6 +17,7 @@
   --sg-ok: #5cc98c;
   --sg-warn: #e6b45a;
   --sg-bad: #f07a6e;
+  --sg-info: #6aa8e0;
 
   max-width: 1060px;
   margin: 16px 16px 0 0;
@@ -369,7 +370,7 @@
 .sg-tone-warn { --sg-tone: var(--sg-warn); }
 .sg-tone-bad { --sg-tone: var(--sg-bad); }
 .sg-tone-muted { --sg-tone: var(--sg-muted); }
-.sg-tone-info { --sg-tone: #6fa8dc; }
+.sg-tone-info { --sg-tone: var(--sg-info, #6fa8dc); }
 
 .sg-swatch {
   flex: none;
@@ -827,6 +828,14 @@
   .sg-bar {
     grid-template-columns: minmax(0, 1fr) minmax(44px, 1.4fr) 3.6em;
   }
+
+  /* Below this width the table can no longer shrink its way to fit: every
+     column becomes a sliver and a prose cell wraps eight lines tall. The
+     Views::table wrapper is the scroll box, so give the table a floor — it
+     overflows and scrolls instead of crushing. */
+  .sg-wrap .sg-table {
+    min-width: 620px;
+  }
 }
 
 /* Tabbed mode ----------------------------------------------------------- */
@@ -845,4 +854,91 @@
 
 .sg-tabbed .sg-section-title {
   margin-top: 2px;
+}
+
+/* Protection arm row: a lamp plus one sentence. The lamp carries the state
+   an owner needs at a glance; armed gets the only glow on the page. */
+.sg-arm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin: 0 0 12px;
+  background: var(--sg-panel-2);
+  border: 1px solid var(--sg-line);
+  border-radius: 8px;
+}
+
+.sg-lamp {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--sg-lamp, var(--sg-muted));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--sg-lamp, var(--sg-muted)) 18%, transparent);
+}
+
+.sg-lamp.is-ok { --sg-lamp: var(--sg-ok); }
+.sg-lamp.is-warn { --sg-lamp: var(--sg-warn); }
+.sg-lamp.is-bad { --sg-lamp: var(--sg-bad); }
+.sg-lamp.is-muted { --sg-lamp: var(--sg-muted); }
+
+.sg-lamp.is-ok {
+  animation: sg-pulse 2.6s ease-in-out infinite;
+}
+
+@keyframes sg-pulse {
+  0%, 100% { box-shadow: 0 0 0 3px color-mix(in srgb, var(--sg-ok) 18%, transparent); }
+  50% { box-shadow: 0 0 0 6px color-mix(in srgb, var(--sg-ok) 10%, transparent); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sg-lamp.is-ok { animation: none; }
+}
+
+.sg-arm-text {
+  color: var(--sg-ink);
+  font-weight: 550;
+}
+
+/* Probe stamp: the self-test's one-line score. */
+.sg-probe-stamp {
+  display: inline-block;
+  padding: 2px 10px;
+  margin: 2px 0 10px;
+  border: 1px solid var(--sg-line);
+  border-radius: 999px;
+  background: var(--sg-panel-2);
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.sg-probe-stamp.sg-lamp-text-ok { color: var(--sg-ok); border-color: color-mix(in srgb, var(--sg-ok) 35%, var(--sg-line)); }
+.sg-probe-stamp.sg-lamp-text-warn { color: var(--sg-warn); border-color: color-mix(in srgb, var(--sg-warn) 35%, var(--sg-line)); }
+.sg-probe-stamp.sg-lamp-text-bad { color: var(--sg-bad); border-color: color-mix(in srgb, var(--sg-bad) 40%, var(--sg-line)); }
+
+/* Verdict chips on visitor rows: same badge shape, slightly tighter. */
+.sg-badge.sg-verdict {
+  padding: 1px 7px;
+  font-size: 10.5px;
+}
+
+/* Stats read as numbers: keep digits aligned down the row. */
+.sg-stat-value {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Subject hashes can dominate a table's width; clamp them. */
+.sg-table code {
+  max-width: 22ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+  vertical-align: bottom;
+}
+
+/* Flagged-reason chips in the visitor drawer. */
+.sg-chips .sg-flag-reason {
+  display: inline-block;
 }

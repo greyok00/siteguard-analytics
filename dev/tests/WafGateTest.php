@@ -3,9 +3,11 @@ declare(strict_types=1);
 
 namespace SiteGuard\Tests;
 
+
 use SiteGuard\Core\Policy;
 use SiteGuard\Core\RequestContext;
 use SiteGuard\Core\Settings;
+use SiteGuard\Core\Subjects;
 use SiteGuard\Core\Waf\Gate;
 
 /**
@@ -15,17 +17,18 @@ use SiteGuard\Core\Waf\Gate;
  */
 final class WafGateTest extends TestCase
 {
-    /** @return array{0:Gate,1:FakeClock,2:SqliteBlocks,3:SqliteIncidents,4:SqliteDb} */
-    private function make(string $mode, int $now = 1700000000): array
+    /** @return array{0:Gate,1:FakeClock,2:SqliteBlocks,3:SqliteIncidents,4:SqliteDb,5:SqlitePeople} */
+    private function make(string $mode, int $now = 1700000000, bool $deviceHints = true): array
     {
         $clock = new FakeClock($now);
         $db = new SqliteDb();
         $blocks = new SqliteBlocks($db->pdo);
         $incidents = new SqliteIncidents($db->pdo);
+        $people = new SqlitePeople($db->pdo);
         $settings = Settings::from([]);
         $settings['waf_profile'] = $mode;
-        $gate = new Gate($mode, new Policy($settings), $incidents, $blocks, $clock);
-        return [$gate, $clock, $blocks, $incidents, $db];
+        $gate = new Gate($mode, new Policy($settings), $incidents, $blocks, $clock, $people, $deviceHints);
+        return [$gate, $clock, $blocks, $incidents, $db, $people];
     }
 
     public function testObserveRecordsButNeverDenies(): void
@@ -204,5 +207,103 @@ final class WafGateTest extends TestCase
         $blockCheck = $gate->check(Support::context(['path' => '/products/widget', 'ipSubject' => 'ip4:cafe0bad']));
         $this->assertTrue($blockCheck->denied(), 'an existing block still denies through the WAF path.');
         $this->assertSame('blocked', $blockCheck->reason);
+    }
+
+    public function testStoredDeviceLiesDenyOnTheSecondVisit(): void
+    {
+        [$gate, , $blocks, , , $people] = $this->make('balanced');
+        $visitorId = str_repeat('9', 32);
+        $people->setProfile($visitorId, ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0']);
+
+        $first = $gate->check(Support::context(['path' => '/products/widget', 'visitorId' => $visitorId]));
+        $this->assertTrue($first->denied(), 'a stored touch-free iPhone is a denial signature in balanced.');
+        $this->assertSame('fp-touchless-ios', $first->rule, 'the incident names the fingerprint rule.');
+        $this->assertSame('ip', $first->scope, 'the block lands on the address, never the visitor id.');
+        $this->assertSame(1, $blocks->countActive(1700000000));
+    }
+
+    public function testDeviceHintOffLeavesProfileEvidenceInert(): void
+    {
+        [$gate, , $blocks, $incidents, , $people] = $this->make('balanced', 1700000000, false);
+        $visitorId = str_repeat('9', 32);
+        $people->setProfile($visitorId, ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0']);
+        $decision = $gate->check(Support::context(['path' => '/products/widget', 'visitorId' => $visitorId]));
+        $this->assertFalse($decision->denied(), 'the toggle is a real off switch, not a suggestion.');
+        $this->assertSame(0, $blocks->countActive(1700000000));
+        $this->assertSame(0, $incidents->countSince(1700000000 - 3600));
+    }
+
+    public function testDeviceHintsRecordInObserveAndPassInOff(): void
+    {
+        [$observe, , , $incidents, , $people] = $this->make('observe');
+        $visitorId = str_repeat('9', 32);
+        $people->setProfile($visitorId, ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0']);
+        $ctx = Support::context(['path' => '/products/widget', 'visitorId' => $visitorId]);
+        $decision = $observe->check($ctx);
+        $this->assertFalse($decision->denied(), 'observe records, never denies.');
+        $this->assertSame(1, $incidents->countSince(1700000000 - 3600), 'the lie is on the record.');
+
+        [$off, , , $offIncidents, , $offPeople] = $this->make('off');
+        $offPeople->setProfile($visitorId, ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0']);
+        $this->assertFalse($off->check($ctx)->denied());
+        $this->assertSame(0, $offIncidents->countSince(1700000000 - 3600));
+    }
+
+    public function testFirstVisitHasNoStoredProfileAndPasses(): void
+    {
+        [$gate, , $blocks, $incidents] = $this->make('balanced');
+        $decision = $gate->check(Support::context(['path' => '/products/widget', 'visitorId' => str_repeat('9', 32)]));
+        $this->assertFalse($decision->denied(), 'no stored profile, no profile hits: the first visit is never denied for one.');
+        $this->assertSame(0, $blocks->countActive(1700000000));
+        $this->assertSame(0, $incidents->countSince(1700000000 - 3600));
+    }
+
+    public function testForgedVisitorIdWithLyingProfileStillBlocksOnlyTheAddress(): void
+    {
+        [$gate, , $blocks, , , $people] = $this->make('balanced');
+        $visitorId = str_repeat('9', 32);
+        // a HIGH device lie: the lone hit stands at maxSeverity 4 >= the balanced bar 4
+        $people->setProfile($visitorId, ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0']);
+        $decision = $gate->check(Support::context([
+            'path' => '/products/widget',
+            'visitorId' => $visitorId,
+            'ipSubject' => 'ip4:cafe0bad',
+        ]));
+        $this->assertTrue($decision->denied(), 'stored lies score against the request.');
+        $this->assertSame('ip', $decision->scope, 'the forged id cannot redirect the block at a visitor subject.');
+        $this->assertSame(1, $blocks->countActive(1700000000), 'exactly one row, for the address.');
+        $active = $blocks->active('ip4:cafe0bad', 1700000000);
+        $this->assertTrue($active !== null, 'the row belongs to the address.');
+        $visitorRow = $blocks->active(Subjects::VISITOR_PREFIX . str_repeat('9', 32), 1700000000);
+        $this->assertTrue($visitorRow === null, 'no row for the visitor id.');
+    }
+
+    public function testMalformedStoredProfileActsClean(): void
+    {
+        [$gate, , $blocks, , $db, $people] = $this->make('balanced');
+        $visitorId = str_repeat('9', 32);
+        // raw junk instead of JSON goes straight into the column; profileFor
+        // must decode-fail to [] and the gate must treat that as silence
+        $stmt = $db->pdo->prepare("INSERT INTO people (id, profile) VALUES (:id, :p)");
+        $stmt->execute([':id' => $visitorId, ':p' => '{not json']);
+        $decision = $gate->check(Support::context(['path' => '/products/widget', 'visitorId' => $visitorId]));
+        $this->assertFalse($decision->denied(), 'a malformed stored profile is absence of evidence, not evidence.');
+        $this->assertSame([], $people->profileFor($visitorId));
+        $this->assertSame(0, $blocks->countActive(1700000000));
+    }
+
+    public function testAuthenticatedSubjectIsObservedEvenWithLyingProfile(): void
+    {
+        [$gate, , $blocks, , , $people] = $this->make('balanced');
+        $visitorId = str_repeat('9', 32);
+        $people->setProfile($visitorId, ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0']);
+        $decision = $gate->check(Support::context([
+            'path' => '/shop/checkout',
+            'visitorId' => $visitorId,
+            'isAuthenticated' => true,
+            'accountId' => 51,
+        ]));
+        $this->assertFalse($decision->denied(), 'signed-in non-admins are never content-denied, profile lies included.');
+        $this->assertSame(0, $blocks->countActive(1700000000));
     }
 }

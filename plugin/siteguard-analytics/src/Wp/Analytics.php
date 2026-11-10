@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace SiteGuard\Wp;
 
+use SiteGuard\Core\Profile\Fingerprint;
+
 /**
  * Read-only aggregate queries for the dashboard.
  *
@@ -179,7 +181,7 @@ final class Analytics
         $placeholders = implode(',', array_fill(0, count($ids), '%s'));
         $latest = [];
         foreach ((array) $this->db->get_results($this->db->prepare(
-            "SELECT id, first_seen, sessions, ip, ua, device, browser, last_path
+            "SELECT id, first_seen, sessions, ip, ua, device, browser, last_path, profile
              FROM $visitors WHERE id IN ($placeholders)",
             ...$ids
         ), ARRAY_A) as $row) {
@@ -189,6 +191,14 @@ final class Analytics
         return array_map(static function (array $r) use ($latest): array {
             $id = (string) $r['visitor'];
             $extra = $latest[$id] ?? [];
+            $profile = [];
+            $json = (string) ($extra['profile'] ?? '');
+            if ($json !== '') {
+                $decoded = json_decode($json, true);
+                if (is_array($decoded)) {
+                    $profile = $decoded;
+                }
+            }
             return [
                 'visitor' => $id,
                 'pageviews' => (int) $r['pageviews'],
@@ -200,6 +210,8 @@ final class Analytics
                 'device' => (string) ($extra['device'] ?? ''),
                 'browser' => (string) ($extra['browser'] ?? ''),
                 'last_path' => (string) ($extra['last_path'] ?? ''),
+                'profile' => $profile,
+                'verdict' => Fingerprint::verdict($profile),
             ];
         }, $rows);
     }

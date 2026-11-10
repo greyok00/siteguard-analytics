@@ -158,8 +158,11 @@ final class Profiles
                 . 'a Mac while stating Windows, which a tampered client often gets wrong. Software-rendered '
                 . 'WebGL means the graphics stack named SwiftShader or llvmpipe, the default renderers inside '
                 . 'headless browser automation. Implausible device hints means the hardware a client described '
-                . 'cannot exist in that family, e.g. a touch-free phone or a 5&nbsp;GB browser memory tier. All are '
-                . 'evidence, not blocks: a flagged visitor is still served exactly like everyone else.</p>';
+                . 'cannot exist in that family, e.g. a touch-free phone or a 5&nbsp;GB browser memory tier. '
+                . 'Implausible device hints are signed rules: with device-hint enforcement armed in Settings they '
+                . 'score like attack signatures, and the block lands on the network address. Conflicts and '
+                . 'software renderers remain evidence only. A flagged visitor is still served exactly like '
+                . 'everyone else until the content gate itself crosses a threshold.</p>';
         }
         Views::closeCard();
     }

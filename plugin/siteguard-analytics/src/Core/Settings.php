@@ -32,9 +32,15 @@ final class Settings
             // Balanced is the shipped profile: enforcement on, baseline limits.
             'profile' => 'balanced',
             // WAF mode, separate knob from the enforcement profile so turning
-            // the WAF on never flips live rate-limit behaviour. observe is the
-            // shipped default: zero new denials until the owner flips it.
-            'waf_profile' => 'observe',
+            // the WAF on never flips live rate-limit behaviour. balanced is
+            // the shipped default for a new install: the site is defended on
+            // day one. An install that already stored a value keeps it, so
+            // nobody's observe choice flips silently under them.
+            'waf_profile' => 'balanced',
+            // Impossible-device-hint enforcement: profiles a browser reported
+            // that no real device of its family ships with become denial
+            // signatures. The always-block-network-address law still holds.
+            'waf_device_hints' => true,
             'limits' => self::DEFAULT_LIMITS,
             // Distinct-path coverage in a 10-minute window. 0 disables the rule.
             'distinct_window' => 600,
@@ -128,6 +134,9 @@ final class Settings
             } else {
                 $clean['waf_profile'] = $wafProfile;
             }
+        }
+        if (array_key_exists('waf_device_hints', $input)) {
+            $clean['waf_device_hints'] = (bool) $input['waf_device_hints'];
         }
         if (array_key_exists('enabled', $input)) {
             $clean['enabled'] = (bool) $input['enabled'];

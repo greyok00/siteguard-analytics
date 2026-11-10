@@ -26,6 +26,14 @@ interface People
 
     public function linkIdentity(string $visitorId, int $accountId, int $now): void;
 
+    /**
+     * The browser-reported signals last stored for a visitor, decoded.
+     * An unknown or malformed row answers [] (silence is clean, not a lie);
+     * the WAF consults this to score stored device-lie evidence.
+     * @return array<string,mixed>
+     */
+    public function profileFor(string $visitorId): array;
+
     public function countSessions(int $since, int $until): int;
 
     public function pruneBefore(int $before): int;

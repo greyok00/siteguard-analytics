@@ -50,7 +50,15 @@ final class Overview
             'Incidents' => number_format_i18n($totals['incidents']),
             'Active blocks' => number_format_i18n($totals['active_blocks']),
             'Profile' => ucfirst($policy->profile()),
+            'Content gate' => ucfirst(Config::policy()->wafMode()),
         ]);
+
+        if (Config::policy()->wafMode() === 'observe' && $policy->profile() !== Policy::OBSERVE) {
+            Views::notice(
+                'Content protection is in observe mode: every payload hit is recorded in Security, but nothing is denied. Flip it in Settings when the record looks sane.',
+                'warning'
+            );
+        }
 
         $labels = array_map(
             static fn (array $day): string => gmdate('M j', strtotime($day['day'] . ' UTC')),

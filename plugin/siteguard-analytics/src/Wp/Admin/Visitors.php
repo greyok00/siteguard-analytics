@@ -157,6 +157,24 @@ final class Visitors
         }
         Views::openCard('Fingerprint', 'Latest values reported by the browser');
         if ($profile) {
+            $verdict = \SiteGuard\Core\Profile\Fingerprint::verdict($profile);
+            echo '<p class="sg-fp-verdict">' . Views::verdictChip($verdict) . '</p>';
+            if ($verdict === 'flagged') {
+                $reasons = array_merge(
+                    \SiteGuard\Core\Profile\Fingerprint::impossibles($profile),
+                    \SiteGuard\Core\Profile\Fingerprint::conflicts($profile),
+                    \SiteGuard\Core\Profile\Fingerprint::headlessReasons($profile)
+                );
+                if ($reasons) {
+                    echo '<ul class="sg-chips">';
+                    foreach ($reasons as $reason) {
+                        echo '<li class="sg-flag-reason"><code>' . esc_html((string) $reason) . '</code></li>';
+                    }
+                    echo '</ul>';
+                    echo '<p class="sg-lead">Each named reason is a hint no real device of this family reports. With device-hint '
+                        . 'enforcement armed in Settings, these reasons score as attack signatures against the network address.</p>';
+                }
+            }
             $rows = [];
             foreach ($profile as $key => $value) {
                 $label = self::SIGNAL_LABELS[(string) $key] ?? (string) $key;
@@ -248,10 +266,13 @@ final class Visitors
                     : '<span class="sg-muted">not stored</span>',
                 esc_html(trim(ucfirst($visitor['browser']) . ' / ' . $visitor['device'], ' /')),
                 esc_html(number_format_i18n($visitor['pageviews'])),
+                Views::verdictChip((string) ($visitor['verdict'] ?? 'unknown')),
                 esc_html(self::when($visitor['last_seen'])),
             ];
         }
-        Views::table(['Visitor', 'Address', 'Browser / device', 'Pageviews', 'Last seen'], $rows, 'No pageviews recorded in the last 30 days.');
+        Views::table(['Visitor', 'Address', 'Browser / device', 'Pageviews', 'Verdict', 'Last seen'], $rows, 'No pageviews recorded in the last 30 days.');
+        echo '<p class="sg-foot">The verdict reads the stored fingerprint: flagged means the browser reported a hint it cannot mean '
+            . '(a self-disagreement, a software renderer, or a device lie). It is evidence for your eyes; the content gate scores it, this table never blocks.</p>';
         Views::closeCard();
 
         Views::openCard('Account correlation');

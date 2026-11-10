@@ -99,6 +99,29 @@ final class WpdbPeopleStore implements People
         ));
     }
 
+    /**
+     * The stored profile JSON for one visitor, decoded. Silence laws: an
+     * unknown id, an empty column, or JSON that does not decode to an array
+     * all answer [] — absence of evidence is clean, never a lie.
+     * @return array<string,mixed>
+     */
+    public function profileFor(string $visitorId): array
+    {
+        if ($visitorId === '' || !preg_match('/^[0-9a-f]{32}$/', $visitorId)) {
+            return [];
+        }
+        $table = $this->tables['visitors'];
+        $json = (string) $this->db->get_var($this->db->prepare(
+            "SELECT profile FROM {$table} WHERE id = %s",
+            $visitorId
+        ));
+        if ($json === '') {
+            return [];
+        }
+        $decoded = json_decode($json, true);
+        return is_array($decoded) ? $decoded : [];
+    }
+
     public function linkIdentity(string $visitorId, int $accountId, int $now): void
     {
         if ($visitorId === '' || $accountId < 1) {

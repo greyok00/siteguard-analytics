@@ -42,6 +42,8 @@ final class SettingsTest extends TestCase
             'consent_mode' => 'required',
             'ip_storage' => 'none',
             'collect' => '1',
+            'waf_profile' => 'strict',
+            'waf_device_hints' => '1',
             'distinct_limit' => '300',
             'strict_factor' => '0.4',
             'account_multiplier' => '3',
@@ -50,6 +52,8 @@ final class SettingsTest extends TestCase
         ], Settings::from([]));
         $this->assertCount(0, $errors);
         $this->assertSame('observe', $clean['profile']);
+        $this->assertSame('strict', $clean['waf_profile']);
+        $this->assertSame(true, $clean['waf_device_hints']);
         $this->assertSame(true, $clean['collect']);
         $this->assertSame(300, $clean['distinct_limit']);
         $this->assertSame(0.4, $clean['strict_factor']);
@@ -95,12 +99,24 @@ final class SettingsTest extends TestCase
     public function testBooleanCheckboxesEmitAHiddenZeroCompanion(): void
     {
         $file = (string) file_get_contents(SITEGUARD_DIR . 'src/Wp/Admin/SettingsPage.php');
-        foreach (['enabled', 'collect'] as $field) {
+        foreach (['enabled', 'collect', 'waf_device_hints'] as $field) {
             $this->assertTrue(
                 str_contains($file, '<input type="hidden" name="' . $field . '" value="0">'),
                 'A hidden zero must accompany the ' . $field . ' checkbox.'
             );
         }
+    }
+
+    public function testWafDefaultsAreBalancedAndArmed(): void
+    {
+        $settings = Settings::from([]);
+        $this->assertSame('balanced', $settings['waf_profile'], 'a fresh install is defended by default.');
+        $this->assertSame(true, $settings['waf_device_hints'], 'device-hint enforcement ships armed.');
+
+        // an existing stored choice survives the merge: no silent flips
+        $kept = Settings::from(['waf_profile' => 'observe', 'waf_device_hints' => false]);
+        $this->assertSame('observe', $kept['waf_profile']);
+        $this->assertSame(false, $kept['waf_device_hints']);
     }
 
     public function testRetentionBoundsAreEnforced(): void
