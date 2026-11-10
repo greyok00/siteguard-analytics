@@ -4,11 +4,11 @@ Tags: security, analytics, rate limiting, incidents, privacy
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.1.9
+Stable tag: 0.1.11
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Rate limits, temporary blocks, incident records, and light first-party analytics, with no CDN or external service.
+Rate limits, temporary blocks, content-attack rules, a fingerprint watchlist, incident records, and light first-party analytics, with no CDN or external service.
 
 == Description ==
 
@@ -34,6 +34,13 @@ be explained by the row it wrote.
   a permaban, and any block can be lifted by hand.
 * **Incident records.** Each block stores the rule, class, window, count, limit,
   and subject, so nothing is blocked without a reason on file.
+* **Content-attack rules.** Request rules score probes, traversal and encoding
+  tricks, structural shape anomalies, and device-hint impossibles in the same
+  ledger, with a live self-test page that runs the shipped corpus.
+* **Fingerprint watchlist.** Save a tampered browser's profile and matching
+  visitors score it with graded severity; every incident names the saved
+  profile. Candidate profiles are drafted from recent tampering signals, and
+  the list imports and exports as JSON.
 * **Analytics that never decide access.** Pageviews, sessions, landing and exit
   paths, referrers, device class, and browser are counted for the dashboard.
 * **Bounded retention.** Old rows are deleted on a schedule; exports are
@@ -94,6 +101,33 @@ jurisdiction. Consult your own counsel.
 
 == Changelog ==
 
+= 0.1.11 =
+* Fingerprint watchlist: save a visitor's tampering profile (name, notes,
+  anchors) and it scores on the same WAF ladder with graded severity; every
+  incident names the saved profile.
+* The Profiles screen carries the watchlist card (create, edit, delete,
+  import, export), a candidates card drafted from recent tampering signals
+  behind the stored-address mode, and a save-as-profile flow on visitor
+  detail.
+* Enforcement follows the WAF profile: balanced keeps a single anchor under
+  the block line, strict lets one anchor block, and the toggle lives in
+  Settings with observe-first advice.
+* The visitors table stores the keyed address hash beside the address (added
+  through the table-version bump), so candidate matching works on upgraded
+  installs too.
+* 42 new tests; the suite is at 162.
+
+= 0.1.10 =
+* WAF request-inspection rules grew from 12 to 46: header and token
+  anomalies, path traversal, encoded-URL families, method misuse, and the
+  structural impossibles.
+* Layered encodings are unwound before evaluation and the decode steps are
+  written as evidence rows with each block.
+* Device-hint impossibles: header combinations that cannot honestly co-occur,
+  stated as evidence rather than scored.
+* WAF enforcement modes (off, observe, balanced, strict) with a self-test
+  page that re-runs the shipped corpus as fixtures.
+
 = 0.1.9 =
 * Renamed Grey SiteGuard + Analytics, so the directory slug names this plugin
   and is not confused with the existing SiteGuard plugins.
@@ -129,6 +163,10 @@ jurisdiction. Consult your own counsel.
 * Single-page dashboard, request coverage matrix, and operations checks.
 
 == Upgrade Notice ==
+
+= 0.1.11 =
+The visitors table gains one column through the scheduled table-version
+bump; no action is required.
 
 = 0.1.9 =
 Plugin Check clean: no warnings. No schema or behaviour change.
