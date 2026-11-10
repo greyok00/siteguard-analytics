@@ -75,14 +75,15 @@ final class WpdbPeopleStore implements People
             : null;
 
         $this->db->query($this->db->prepare(
-            "INSERT INTO {$table} (id, first_seen, last_seen, sessions, pageviews, ip, ua, profile, last_path)
-             VALUES (%s, %s, %s, %d, %d, %s, %s, %s, %s)
+            "INSERT INTO {$table} (id, first_seen, last_seen, sessions, pageviews, ip, ua, ip_hash, profile, last_path)
+             VALUES (%s, %s, %s, %d, %d, %s, %s, %s, %s, %s)
              ON DUPLICATE KEY UPDATE
                 last_seen = VALUES(last_seen),
                 sessions = sessions + %d,
                 pageviews = pageviews + %d,
                 ip = IF(VALUES(ip) <> '', VALUES(ip), ip),
                 ua = IF(VALUES(ua) <> '', VALUES(ua), ua),
+                ip_hash = IF(VALUES(ip_hash) <> '', VALUES(ip_hash), ip_hash),
                 profile = IF(VALUES(profile) IS NOT NULL, VALUES(profile), profile),
                 last_path = IF(VALUES(last_path) <> '', VALUES(last_path), last_path)",
             $visitorId,
@@ -92,6 +93,12 @@ final class WpdbPeopleStore implements People
             $views,
             substr((string) ($meta['ip'] ?? ''), 0, 45),
             substr((string) ($meta['ua'] ?? ''), 0, 400),
+            // Same write the session row gets: the latest non-empty beacon
+            // hash wins (empty-skip guard like ip/ua) on first insert and on
+            // every duplicate-key path, so attribution reads the address's
+            // freshest keyed form. touchSession threads the identical
+            // derivation side by side.
+            substr((string) ($meta['ip_hash'] ?? ''), 0, 40),
             $profile,
             substr((string) ($meta['last_path'] ?? ''), 0, 255),
             $sessions,

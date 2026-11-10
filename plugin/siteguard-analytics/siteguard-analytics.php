@@ -26,7 +26,7 @@ define('SITEGUARD_VERSION', '0.1.9');
 define('SITEGUARD_FILE', __FILE__);
 define('SITEGUARD_DIR', plugin_dir_path(__FILE__));
 define('SITEGUARD_URL', plugin_dir_url(__FILE__));
-define('SITEGUARD_TABLE_VERSION', '2');
+define('SITEGUARD_TABLE_VERSION', '3');
 
 // Emergency stop. Add to wp-config.php to stop enforcement and collection
 // without touching the dashboard:

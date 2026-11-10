@@ -51,6 +51,15 @@ final class Policy
     }
 
     /**
+     * Whether fingerprint-watchlist entries feed the WAF score. Default-armed
+     * but inert until an entry exists and the watchlist store is wired.
+     */
+    public function watchlistEnforced(): bool
+    {
+        return (bool) ($this->settings['waf_watchlist'] ?? true);
+    }
+
+    /**
      * Rules for a class as [windowSeconds, limit] pairs, already scaled for
      * the profile and for a signed-in account.
      *

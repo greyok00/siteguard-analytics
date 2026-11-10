@@ -9,9 +9,11 @@ use SiteGuard\Core\Policy;
 use SiteGuard\Core\RequestContext;
 use SiteGuard\Core\Subjects;
 use SiteGuard\Core\Profile\Fingerprint;
+use SiteGuard\Core\Profile\Watchlist as WatchlistLogic;
 use SiteGuard\Core\Store\Blocks;
 use SiteGuard\Core\Store\Incidents;
 use SiteGuard\Core\Store\People;
+use SiteGuard\Core\Store\Watchlist;
 
 /**
  * Content-level attack gate: the SECOND detection stage of the pipeline, run
@@ -46,7 +48,8 @@ final class Gate
         private Blocks $blocks,
         private Clock $clock,
         private People $profiles,
-        private bool $deviceHints = true
+        private bool $deviceHints = true,
+        private ?Watchlist $watchlist = null
     ) {
     }
 
@@ -87,8 +90,24 @@ final class Gate
         // is exactly when a returning automation client matters. The hits
         // score like any content signature; the BLOCK still lands on the
         // network address (blockableSubject below), never the visitor id.
-        if ($this->deviceHints && $ctx->visitorId !== '') {
-            $hits = array_merge($hits, Fingerprint::hits($this->profiles->profileFor($ctx->visitorId)));
+        // The one stored row feeds BOTH armed merges: the device-hints knob
+        // and the watchlist knob toggle independently, but they judge the
+        // same profile, so the store is consulted at most once per request.
+        $profile = ($this->deviceHints
+                || ($this->watchlist !== null && $this->policy->watchlistEnforced()))
+            && $ctx->visitorId !== ''
+            ? $this->profiles->profileFor($ctx->visitorId)
+            : [];
+        if ($this->deviceHints && $profile !== []) {
+            $hits = array_merge($hits, Fingerprint::hits($profile));
+        }
+        // Owner-saved watchlist matches: separate block on purpose — the
+        // device-hints knob and the watchlist knob toggle independently, so a
+        // profile that qualifies feeds BOTH merges only when both are armed.
+        // Same score path as the built-in hints: the bar below does the
+        // denying, the block still lands on the network address.
+        if ($this->watchlist !== null && $this->policy->watchlistEnforced() && $profile !== []) {
+            $hits = array_merge($hits, WatchlistLogic::hits($profile, $this->watchlist->all()));
         }
 
         if (!$hits) {
@@ -107,6 +126,7 @@ final class Gate
         }
 
         [$maxSeverity, $score, $rule, $evidence] = $this->score($hits);
+        $evidence = $this->withWatchlistEvidence($hits, $evidence);
         $thresholds = $this->mode === 'strict'
             ? [self::STRICT_MAX_SEVERITY, self::STRICT_SCORE]
             : [self::BALANCED_MAX_SEVERITY, self::BALANCED_SCORE];
@@ -135,7 +155,7 @@ final class Gate
     }
 
     /**
-     * @param list<array{rule:string,group:string,severity:int,evidence:string}> $hits
+     * @param list<array{rule:string,group:string,severity:int,evidence:string|array<string,mixed>}> $hits
      * @return array{0:int,1:int,2:string,3:array<string,mixed>} maxSeverity, score, worst rule, evidence bundle
      */
     private function score(array $hits): array
@@ -165,6 +185,39 @@ final class Gate
             'score' => $score,
         ];
         return [$maxSeverity, $score, $rule, $evidence];
+    }
+
+    /**
+     * Evidence-only enrichment, no enforcement change: a watchlist hit's own
+     * evidence array (profile name, anchored reasons, entry id) is folded into
+     * the bundle so every incident and block names the entry READABLY, the way
+     * the design's incident law requires — rule ids alone show `wl-a1b2c3`,
+     * which no one can read later. Capped at 3 like the rules list. Every
+     * downstream posture (deny, observe, below-threshold) consumes the same
+     * bundle, so all three carry the fold; thresholds, score, subject, and
+     * deny logic are untouched by construction.
+     * @param list<array{rule:string,group:string,severity:int,evidence:string|array<string,mixed>}> $hits
+     * @param array<string,mixed> $evidence
+     * @return array<string,mixed>
+     */
+    private function withWatchlistEvidence(array $hits, array $evidence): array
+    {
+        $fold = [];
+        foreach ($hits as $hit) {
+            if (!str_starts_with($hit['rule'], 'wl-') || !is_array($hit['evidence'])) {
+                continue;
+            }
+            $entry = $hit['evidence'];
+            $fold[] = [
+                'profile' => (string) ($entry['profile'] ?? ''),
+                'reasons' => array_values(array_filter((array) ($entry['reasons'] ?? []), 'is_string')),
+                'id' => (string) ($entry['id'] ?? ''),
+            ];
+            if (count($fold) === 3) {
+                break;
+            }
+        }
+        return $fold === [] ? $evidence : $evidence + ['watchlist' => $fold];
     }
 
     private function blockableSubject(RequestContext $ctx): string

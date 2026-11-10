@@ -245,3 +245,11 @@ nothing. **Picked: JSON option.**
 - A WafProbe-style live self-test remains green with the new constructor
   argument (inert store).
 - The full suite (125 passing today) stays green.
+
+Verified 2026-11-10 on branch `fingerprint-watchlist` (commits 2ba5a1d..876b0e3):
+42 tests added (final suite 162 passing, 1358 assertions), all hard
+requirements pinned per the cross-check table in the build's verification
+report; screenshot sweep skipped honestly (~250-line harness gap — noted for
+the next pass). The automated-candidates goal surfaced one end-to-end seam
+( `visitors.ip_hash` existed only in the test shim) fixed with schema,
+write-path, migration bump, and parity pins.

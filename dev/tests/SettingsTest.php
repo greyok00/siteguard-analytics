@@ -119,6 +119,22 @@ final class SettingsTest extends TestCase
         $this->assertSame(false, $kept['waf_device_hints']);
     }
 
+    public function testDefaultsCarryWatchlistToggle(): void
+    {
+        $settings = Settings::from([]);
+        $this->assertSame(true, $settings['waf_watchlist'], 'The fingerprint watchlist ships armed.');
+    }
+
+    public function testSanitizeCastsWatchlistToggle(): void
+    {
+        [$off, $offErrors] = Settings::sanitize(['waf_watchlist' => '0'], Settings::from([]));
+        $this->assertSame(false, $off['waf_watchlist']);
+        [$on, $onErrors] = Settings::sanitize(['waf_watchlist' => '1'], Settings::from([]));
+        $this->assertSame(true, $on['waf_watchlist']);
+        $this->assertCount(0, $offErrors, 'The toggle is bool-cast only, never a validation error.');
+        $this->assertCount(0, $onErrors);
+    }
+
     public function testRetentionBoundsAreEnforced(): void
     {
         [$clean, $errors] = Settings::sanitize(['retention' => ['events' => 0, 'audit' => 99999]], Settings::from([]));

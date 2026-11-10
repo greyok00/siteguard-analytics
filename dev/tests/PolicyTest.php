@@ -68,6 +68,22 @@ final class PolicyTest extends TestCase
         $this->assertSame(300, $policy->blockDuration(1));
     }
 
+    public function testWatchlistEnforcedReadsSetting(): void
+    {
+        $this->assertTrue(
+            (new Policy(Settings::from([])))->watchlistEnforced(),
+            'The watchlist ships armed: true without any stored value.'
+        );
+        $this->assertFalse(
+            (new Policy(Settings::from(['waf_watchlist' => false])))->watchlistEnforced(),
+            'An owner who switched it off keeps it off.'
+        );
+        $this->assertTrue(
+            (new Policy(Settings::from(['waf_watchlist' => 'garbage'])))->watchlistEnforced(),
+            'A garbage value is truthy, same treatment as every other bool knob.'
+        );
+    }
+
     public function testRetentionHasAFloor(): void
     {
         $policy = new Policy(Settings::from(['retention' => ['events' => 0]]));
