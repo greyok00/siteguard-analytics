@@ -45,8 +45,10 @@ final class WpdbWatchlist implements Watchlist
     {
         $raw = get_option(self::OPTION, false);
         if (!is_array($raw)) {
-            // missing option (false), a serialized non-array, or truncated
-            // JSON: all read as an empty watchlist, not an error
+            // a missing option (false) and a serialized non-array both fail
+            // the same !is_array check and read as an empty watchlist; a
+            // truncated JSON string is returned by get_option as-is — which
+            // is not an array either, so the same check catches it too
             return [];
         }
         $entries = [];

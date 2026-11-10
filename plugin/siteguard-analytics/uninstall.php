@@ -40,6 +40,7 @@ $siteguard_options = [
     'siteguard_fp_salt',
     'siteguard_fp_version',
     'siteguard_emergency_off',
+    'siteguard_watchlist',
     'siteguard_last_error',
     'siteguard_last_retention',
     'siteguard_last_maintenance',

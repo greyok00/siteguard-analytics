@@ -6,6 +6,7 @@ namespace SiteGuard\Tests;
 
 use SiteGuard\Core\Profile\Fingerprint;
 use SiteGuard\Core\Profile\Watchlist;
+use SiteGuard\Wp\Admin\Actions;
 
 /**
  * The watchlist entry-model and matcher laws: the anchor vocabulary is closed to
@@ -223,7 +224,11 @@ final class WatchlistTest extends TestCase
         $this->assertCount(1, Watchlist::mergeImport([], [$renamed, $renamed]),
             'identical anchors imported twice collapse to one id.');
 
-        // the 200 cap, from a flood of distinct valid entries
+        // the 200 cap, from a flood of distinct valid entries.
+        // The 200 literals here and in WpdbWatchlist::ENTRY_CAP are one law:
+        // the model's cap const is private, so this flood probe is the
+        // drift guard that keeps the model's cap and the adapter's mirror
+        // from moving apart.
         $crowd = [];
         for ($i = 0; $i < 210; $i++) {
             $crowd[] = Watchlist::fromProfile(
@@ -533,6 +538,117 @@ final class WatchlistTest extends TestCase
                 'webgl_vendor' => 'Google Inc. (NVIDIA)', 'webgl_renderer' => 'ANGLE (NVIDIA)'],
             [$entry]),
             'an honest desktop matches nothing.');
+    }
+
+    /**
+     * The blank-form anchor gate (Task 7's consumer): the POST payload
+     * carries which LIES to anchor, one item per submitted anchor
+     * ['rule' => reason, 'signals' => field => fixed value]. The server
+     * rebuilds the entry through fromProfile's own derivation, so the
+     * assembled entry is exactly the model's — never the client's word.
+     */
+    public function testAnchorPostRebuildsTheAnchoredEntry(): void
+    {
+        // one item per checkbox, each carrying its fixed signal value
+        $submitted = [
+            ['rule' => 'claimed:mac-stated:windows',
+                'signals' => ['platform' => 'MacIntel', 'ua_platform' => 'Windows', 'ua_mobile' => '0']],
+            ['rule' => 'software-rendering:webgl_vendor',
+                'signals' => ['webgl_vendor' => 'Google Inc. (SwiftShader)']],
+            ['rule' => 'software-rendering:webgl_renderer',
+                'signals' => ['webgl_renderer' => 'ANGLE (SwiftShader)']],
+        ];
+        // the merged profile the fixed values describe
+        $anchored = ['platform' => 'MacIntel', 'ua_platform' => 'Windows', 'ua_mobile' => '0',
+            'webgl_vendor' => 'Google Inc. (SwiftShader)', 'webgl_renderer' => 'ANGLE (SwiftShader)'];
+        $entry = Actions::anchorEntry($submitted, 'Blank-form attacker', 'notes survive');
+        $this->assertNotNull($entry);
+        $this->assertSame(0, $entry['created'],
+            'the clock stays out of the anchor gate: the caller stamps created before saving.');
+        $this->assertSame('Blank-form attacker', $entry['name']);
+        $this->assertSame('notes survive', $entry['notes']);
+        $this->assertSame(Watchlist::fromProfile($anchored, 'Blank-form attacker', 'notes survive'), $entry,
+            'the assembled entry is exactly what fromProfile derives from the anchored profile.');
+        $this->assertNotNull(Watchlist::normalizeEntry($entry),
+            'what the gate assembled is normal by construction.');
+
+        $hits = Watchlist::hits($anchored, [$entry]);
+        $this->assertCount(1, $hits,
+            'the entry whose anchors describe a client must match that very client.');
+        $this->assertSame('wl-' . $entry['id'], $hits[0]['rule']);
+    }
+
+    /**
+     * The honesty law in both directions: a rule OUTSIDE the vocabulary is
+     * refused outright, and an anchorable lie paired with the honest values
+     * the detectors never fire on cannot re-derive, so it is refused too —
+     * an honest value can never enter via POST.
+     */
+    public function testAnchorPostCarryingOnlyHonestValuesIsRefused(): void
+    {
+        // the honest overlap (iPadOS naming Mac) is not an anchorable rule
+        $this->assertNull(Actions::anchorEntry(
+            [['rule' => 'claimed:mac-stated:ios', 'signals' => ['platform' => 'MacIntel', 'ua_platform' => 'ioS']]],
+            'Honest iPad', ''
+        ), 'a pair the detectors never emit is not anchorable, whatever the POST claims.');
+
+        // an anchorable LIE rule beside values no detector fires on: the
+        // requested rule cannot re-derive from what the payload carried
+        $this->assertNull(Actions::anchorEntry(
+            [['rule' => 'software-rendering:webgl_vendor',
+                'signals' => ['webgl_vendor' => 'Google Inc. (NVIDIA)',
+                    'webgl_renderer' => 'ANGLE (NVIDIA GeForce RTX 4060)']]],
+            'A lie it does not tell', ''
+        ), 'an honest renderer value cannot be anchored as a software-rendering lie.');
+
+        $this->assertNull(Actions::anchorEntry(
+            [['rule' => 'claimed:foo-stated:bar', 'signals' => []]], 'Junk pair', ''),
+            'a rule outside the closed vocabulary is refused outright.');
+        $this->assertNull(Actions::anchorEntry([], 'No anchors', ''),
+            'a submission naming no anchor refuses rather than saving an empty rule set.');
+    }
+
+    /**
+     * Ledger concern pinned here (from Task 2's review): a device-hint lie
+     * depends on no Fingerprint::SIGNALS key — its postable content is the
+     * hardware hint itself — so the blank form must be able to build a
+     * rules-only entry, and normalizeEntry must accept the shape.
+     */
+    public function testBlankFormAnchorsMayBeRulesOnly(): void
+    {
+        $entry = Actions::anchorEntry(
+            [['rule' => 'memory-off-scale', 'signals' => ['mem' => '7', 'platform' => 'Win32']]],
+            'Off-scale memory', '');
+        $this->assertNotNull($entry);
+        $this->assertSame(['memory-off-scale'], $entry['rules']);
+        $this->assertSame([], $entry['signals'],
+            'a hint lie carries its evidence in the reason string, so the entry stores no signal.');
+        $this->assertNotNull(Watchlist::normalizeEntry($entry),
+            'rules-only entries are a valid stored shape.');
+        $this->assertCount(1, Watchlist::hits(['platform' => 'Win32', 'mem' => '7'], [$entry]),
+            'and the rules-only entry must still match its lie live.');
+    }
+
+    /**
+     * POST junk reads as silence, not trust: signal keys outside the two
+     * closed sets (Fingerprint::SIGNALS plus the hardware hints) are
+     * ignored — unknown names, integer keys, array values — so nothing the
+     * payload carries can smuggle itself into the stored signals. A forged
+     * per-anchor id is unread: the entry id is content-derived always.
+     */
+    public function testAnchorPostJunkReadsAsSilence(): void
+    {
+        $entry = Actions::anchorEntry(
+            [['rule' => 'claimed:mac-stated:windows', 'id' => 'forged12345678',
+                'signals' => ['platform' => 'MacIntel', 'ua_platform' => 'Windows', 'ua_mobile' => '0',
+                    'junk-key' => 'x', 'user-agent' => ['deep' => 'array'], 7 => 'integer key']]],
+            'Attacker', '');
+        $this->assertNotNull($entry);
+        $this->assertSame(['claimed:mac-stated:windows'], $entry['rules']);
+        $this->assertSame(['platform' => 'mac', 'ua_platform' => 'windows'], $entry['signals'],
+            'only real signal keys contribute, and the stored value is the derived family, never the raw POST word.');
+        $this->assertNotSame('forged12345678', $entry['id'],
+            'the per-anchor id is unread: the entry id is the content digest.');
     }
 
     /**

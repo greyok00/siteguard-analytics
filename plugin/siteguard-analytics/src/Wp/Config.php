@@ -19,6 +19,7 @@ use SiteGuard\Wp\Store\WpdbCounterStore;
 use SiteGuard\Wp\Store\WpdbDistinctStore;
 use SiteGuard\Wp\Store\WpdbIncidentStore;
 use SiteGuard\Wp\Store\WpdbPeopleStore;
+use SiteGuard\Wp\Store\WpdbWatchlist;
 
 /**
  * Lazily built services shared by the request path and the admin screens.
@@ -126,7 +127,11 @@ final class Config
                 self::blocks(),
                 self::clock(),
                 self::people(),
-                $policy->deviceHintsEnforced()
+                $policy->deviceHintsEnforced(),
+                // The owner-saved watchlist: the Gate scores its matches only
+                // when Policy::watchlistEnforced() arms it (the null default
+                // keeps every other construction site inert).
+                new WpdbWatchlist()
             );
         }
         return self::$wafGate;
