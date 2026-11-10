@@ -397,8 +397,13 @@ final class Watchlist
         $hits = [];
         foreach ($entries as $entry) {
             if (!is_array($entry) || !is_string($entry['id'] ?? null)
-                || !is_array($entry['signals'] ?? null) || !is_array($entry['rules'] ?? null)) {
-                continue; // junk a buggy upstream let through; normalization drops it at save
+                || !is_array($entry['signals'] ?? null) || !is_array($entry['rules'] ?? null)
+                || ($entry['rules'] ?? []) === []) {
+                continue; // junk a buggy upstream let through; normalization drops it at save.
+                // An entry anchoring NOTHING would walk the rule loop
+                // vacuously and emit a phantom severity-0 hit on any
+                // client whose signals agree: it anchors no lie, so it
+                // names no attacker.
             }
             $matched = [];
             $severity = 0;
@@ -494,8 +499,9 @@ final class Watchlist
      * signal and its live counterpart are compared in the exact same
      * form. Family keys and mobile flags are already canonical; the
      * renderer/vendor strings arrive lowercased+trimmed on the live side
-     * and are lowercased here on the stored side — pageviews of one
-     * client drift in case and surrounding whitespace. Unknown keys
+     * and are lowercased+trimmed here on the stored side — pageviews of one
+     * client drift in case and surrounding whitespace, so the two sides
+     * normalize the same way, never asymmetrically. Unknown keys
      * answer null: the closed key set at normalization means this is
      * unreachable for stored entries and makes a forged row simply never
      * equal live.
@@ -504,7 +510,7 @@ final class Watchlist
     {
         return match ($key) {
             'platform', 'ua_platform', 'ua_mobile' => $value,
-            'webgl_vendor', 'webgl_renderer' => strtolower($value),
+            'webgl_vendor', 'webgl_renderer' => strtolower(trim($value)),
             default => null,
         };
     }

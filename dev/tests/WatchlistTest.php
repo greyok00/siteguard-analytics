@@ -395,9 +395,8 @@ final class WatchlistTest extends TestCase
      */
     public function testRendererAnchorMatchesCaseInsensitively(): void
     {
-        $entry = Watchlist::fromProfile(
-            ['webgl_vendor' => 'Google Inc. (SwiftShader)', 'webgl_renderer' => 'ANGLE (SwiftShader)'],
-            'Software renderer');
+        $base = ['webgl_vendor' => 'Google Inc. (SwiftShader)', 'webgl_renderer' => 'ANGLE (SwiftShader)'];
+        $entry = Watchlist::fromProfile($base, 'Software renderer');
         $this->assertSame(['webgl_vendor', 'webgl_renderer'], array_keys($entry['signals']),
             'a renderer lie pins both WebGL strings, never a half anchor.');
         // two pageviews of one client: case and surrounding whitespace drift
@@ -415,6 +414,20 @@ final class WatchlistTest extends TestCase
         $this->assertSame([], Watchlist::hits(
             ['webgl_vendor' => 'Google Inc. (NVIDIA)', 'webgl_renderer' => 'ANGLE (NVIDIA)'],
             [$entry]));
+
+        // Rider from Task 3's review: the OTHER side of the same law. A stored
+        // row whose renderer strings kept surrounding whitespace is a
+        // legitimate row (normalization refuses only whitespace-ONLY values)
+        // and must still reach the live client the pageview-drift law
+        // protects — the comparison trims both sides, not just the live one.
+        $paddedRow = self::entryWith($entry, 'signals', [
+            'webgl_vendor' => '  Google Inc. (SwiftShader)  ',
+            'webgl_renderer' => "\tANGLE (SwiftShader)\t",
+        ]);
+        $this->assertNotNull(Watchlist::normalizeEntry($paddedRow),
+            'a padded renderer value trims non-empty, so it is a valid stored row, not junk.');
+        $this->assertCount(1, Watchlist::hits($base, [$paddedRow]),
+            'stored-side padding trims exactly like the live side: one client, still one match.');
     }
 
     /**
@@ -535,6 +548,24 @@ final class WatchlistTest extends TestCase
         $kept = Watchlist::without(['junk-string', $spoof], 'missing12345678');
         $this->assertSame(['junk-string', $spoof], $kept,
             'an id that names no surviving row changes nothing — junk included.');
+    }
+
+    /**
+     * Rider from Task 3's review: the entry junk gate promises depth, but a
+     * row that passes every typed check while anchoring NOTHING (rules: [])
+     * walks the vacuous loop — kept rules, severity 0 — and would emit a
+     * phantom hit on any matching client. Unreachable from a normalized
+     * store; the gate still refuses it in depth.
+     */
+    public function testEmptyRulesRowIsJunkNotAPhantomHit(): void
+    {
+        $spoof = Watchlist::fromProfile(self::SPOOFED, 'Attacker');
+        // hand-shaped row: the real content id, but nothing anchored — every
+        // typed check in the junk gate passes, so only the emptiness itself
+        // can stand between the row and a phantom severity-0 hit
+        $hollow = self::entryWith(self::entryWith($spoof, 'rules', []), 'signals', []);
+        $this->assertSame([], Watchlist::hits(self::SPOOFED, [$hollow]),
+            'an entry anchoring no reason is junk: it emits no hit, not even an empty one.');
     }
 
     /**
