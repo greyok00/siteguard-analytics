@@ -41,6 +41,10 @@ final class Settings
             // that no real device of its family ships with become denial
             // signatures. The always-block-network-address law still holds.
             'waf_device_hints' => true,
+            // Fingerprint watchlist enforcement: entries in the watchlist feed
+            // the WAF score. Default-armed but inert until an entry exists and
+            // the watchlist store is wired.
+            'waf_watchlist' => true,
             'limits' => self::DEFAULT_LIMITS,
             // Distinct-path coverage in a 10-minute window. 0 disables the rule.
             'distinct_window' => 600,
@@ -137,6 +141,9 @@ final class Settings
         }
         if (array_key_exists('waf_device_hints', $input)) {
             $clean['waf_device_hints'] = (bool) $input['waf_device_hints'];
+        }
+        if (array_key_exists('waf_watchlist', $input)) {
+            $clean['waf_watchlist'] = (bool) $input['waf_watchlist'];
         }
         if (array_key_exists('enabled', $input)) {
             $clean['enabled'] = (bool) $input['enabled'];
