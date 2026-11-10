@@ -90,16 +90,24 @@ final class Gate
         // is exactly when a returning automation client matters. The hits
         // score like any content signature; the BLOCK still lands on the
         // network address (blockableSubject below), never the visitor id.
-        if ($this->deviceHints && $ctx->visitorId !== '') {
-            $hits = array_merge($hits, Fingerprint::hits($this->profiles->profileFor($ctx->visitorId)));
+        // The one stored row feeds BOTH armed merges: the device-hints knob
+        // and the watchlist knob toggle independently, but they judge the
+        // same profile, so the store is consulted at most once per request.
+        $profile = ($this->deviceHints
+                || ($this->watchlist !== null && $this->policy->watchlistEnforced()))
+            && $ctx->visitorId !== ''
+            ? $this->profiles->profileFor($ctx->visitorId)
+            : [];
+        if ($this->deviceHints && $profile !== []) {
+            $hits = array_merge($hits, Fingerprint::hits($profile));
         }
         // Owner-saved watchlist matches: separate block on purpose — the
         // device-hints knob and the watchlist knob toggle independently, so a
         // profile that qualifies feeds BOTH merges only when both are armed.
         // Same score path as the built-in hints: the bar below does the
         // denying, the block still lands on the network address.
-        if ($this->watchlist !== null && $this->policy->watchlistEnforced() && $ctx->visitorId !== '') {
-            $hits = array_merge($hits, WatchlistLogic::hits($this->profiles->profileFor($ctx->visitorId), $this->watchlist->all()));
+        if ($this->watchlist !== null && $this->policy->watchlistEnforced() && $profile !== []) {
+            $hits = array_merge($hits, WatchlistLogic::hits($profile, $this->watchlist->all()));
         }
 
         if (!$hits) {

@@ -355,6 +355,8 @@ final class Profiles
         $saveable = Caps::userCan(Caps::MANAGE_BLOCKS);
         $rows = [];
         foreach ($candidates as $candidate) {
+            // candidateVisitors already coerced the profile it stored; the
+            // array-guard stays because the row's shape is pinned there.
             $profile = is_array($candidate['profile'] ?? null) ? $candidate['profile'] : [];
             $row = [
                 '<a href="' . esc_url(Visitors::detailUrl((string) $candidate['visitor'])) . '"><code>'
@@ -838,9 +840,11 @@ final class Profiles
     {
         // ip_hash rides along because the hashed mode compares against the
         // keyed hash the beacon itself wrote — the one value both sides of
-        // the compare already agree on.
+        // the compare already agree on. Device and browser classes live on
+        // events/sessions rows, not on the visitor rollup, so they are not
+        // selectable here and the card never reads them.
         $rows = (array) $GLOBALS['wpdb']->get_results($GLOBALS['wpdb']->prepare(
-            'SELECT id, last_seen, ip, ua, device, browser, profile, ip_hash FROM '
+            'SELECT id, last_seen, ip, ua, profile, ip_hash FROM '
             . Installer::tables()['visitors'] . ' WHERE last_seen >= %s LIMIT 2000',
             gmdate('Y-m-d H:i:s', $since)
         ), ARRAY_A);
@@ -851,6 +855,9 @@ final class Profiles
             if (is_array($decoded)) {
                 $profile = $decoded;
             }
+            // Detectors and the verdict both read the coerced row: a corrupt
+            // stored profile classifies as silence, never a warning.
+            $profile = self::coercibleProfile($profile);
             if (Fingerprint::verdict($profile) !== 'flagged') {
                 continue;
             }
@@ -863,6 +870,30 @@ final class Profiles
             ];
         }
         return $out;
+    }
+
+    /**
+     * The corrupt-profile law, display-side: decoded-JSON junk of any shape
+     * (nested arrays, ints, string offsets) makes the built-in detectors
+     * emit E_ALL Array-to-string warnings — the same family the matcher's
+     * Watchlist::sanitizeProfile already coerces away at enforcement. The
+     * card runs the same detectors on the same stored rows, so it applies
+     * the same coercion first: every field becomes the string it would be
+     * had the browser reported it, or silent emptiness when the value is not
+     * a string at all (a coerced row can only read as silence, mirroring the
+     * model's private coercer; kept local because it stays private there).
+     * @param array<string,mixed> $profile
+     * @return array<string,string>
+     */
+    private static function coercibleProfile(array $profile): array
+    {
+        $clean = [];
+        foreach ($profile as $key => $value) {
+            if (is_string($key) && is_string($value)) {
+                $clean[$key] = $value;
+            }
+        }
+        return $clean;
     }
 
     /**

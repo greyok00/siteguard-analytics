@@ -186,6 +186,13 @@ final class Actions
             Menu::redirect(Menu::PROFILES, 'The profile needs a name.', 'error');
         }
         $notes = trim(sanitize_textarea_field(wp_unslash((string) ($_POST['notes'] ?? ''))));
+        if (strlen($notes) > 1000) {
+            // The model's byte-based notes cap (NOTES_MAX). Without this
+            // guard the over-long notes sailed to normalization, which
+            // refused the WHOLE entry under the anchor message — naming no
+            // lie the check failed on. The honest redirect names the limit.
+            Menu::redirect(Menu::PROFILES, 'Notes are limited to 1000 characters.', 'error');
+        }
 
         // validate the content source. The entry is always re-derived
         // server-side — from a stored visitor's profile, or through the

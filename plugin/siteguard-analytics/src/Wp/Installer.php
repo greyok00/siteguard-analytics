@@ -185,8 +185,11 @@ final class Installer
             KEY ip (ip)
         ) $charset;";
 
-        // ip, ua, profile, and last_path are the latest values seen for this
-        // visitor; the events table keeps the full history.
+        // ip, ua, ip_hash, profile, and last_path are the latest values seen
+        // for this visitor; the events table keeps the full history. ip_hash
+        // mirrors the sessions column exactly: the candidates card attributes
+        // a visitor to gate history by comparing this keyed hash against the
+        // same derivation over recent incident subjects.
         $sql[] = "CREATE TABLE {$t['visitors']} (
             id char(32) NOT NULL,
             first_seen datetime NOT NULL,
@@ -195,6 +198,7 @@ final class Installer
             pageviews int unsigned NOT NULL DEFAULT 0,
             ip varchar(45) NOT NULL DEFAULT '',
             ua varchar(400) NOT NULL DEFAULT '',
+            ip_hash char(40) NOT NULL DEFAULT '',
             profile mediumtext NULL,
             last_path varchar(255) NOT NULL DEFAULT '',
             PRIMARY KEY  (id),

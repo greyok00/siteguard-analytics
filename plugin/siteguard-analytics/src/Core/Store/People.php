@@ -20,7 +20,7 @@ interface People
     public function closeSession(string $sessionId, string $exitPath, int $now): void;
 
     /**
-     * @param array{ip?:string,ua?:string,profile?:?string,last_path?:string} $meta
+     * @param array{ip?:string,ua?:string,ip_hash?:string,profile?:?string,last_path?:string} $meta
      */
     public function touchVisitor(string $visitorId, int $now, bool $newSession, bool $newPageview, array $meta = []): void;
 

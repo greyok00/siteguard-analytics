@@ -39,7 +39,7 @@ final class SqliteDb
             rule TEXT NOT NULL, severity TEXT NOT NULL, evidence TEXT,
             request_count INTEGER NOT NULL, block_id INTEGER NOT NULL)');
         $this->pdo->exec('CREATE TABLE people (
-            id TEXT PRIMARY KEY, profile TEXT NULL)');
+            id TEXT PRIMARY KEY, ip_hash TEXT NOT NULL DEFAULT \'\', profile TEXT NULL)');
         $this->pdo->exec('CREATE TABLE siteguard_watchlist (
             id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)');
     }

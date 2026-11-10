@@ -609,6 +609,31 @@ final class WatchlistTest extends TestCase
     }
 
     /**
+     * Final-review Finding 3's pin: the save handler refuses over-long
+     * notes with the honest redirect copy BEFORE re-derivation, so a direct
+     * POST can no longer fall through to the misleading "No anchorable
+     * reasons" refusal (the notes cap is in Watchlist's shape gate, but the
+     * handler must name its own failure). The handler is WP-bound (redirect
+     * + exit, no testable seam — the house boundary), so the pin is
+     * source-level the way the settings-form hidden-zero pin is.
+     */
+    public function testSaveHandlerNamesTheNotesLimitBeforeTheAnchorGate(): void
+    {
+        $handler = (string) file_get_contents(SITEGUARD_DIR . 'src/Wp/Admin/Actions.php');
+        $saveStart = strpos($handler, 'public static function watchlistSave');
+        $saveEnd = $saveStart === false ? false : strpos($handler, 'public static function watchlistDelete');
+        $this->assertTrue($saveStart !== false && $saveEnd !== false,
+            'The watchlistSave handler must be extractable from Actions.php.');
+        $save = (string) substr($handler, (int) $saveStart, (int) $saveEnd - (int) $saveStart);
+        $this->assertTrue(str_contains($save, 'strlen($notes) > 1000'),
+            'The handler guards the notes length at the model\'s byte-based cap.');
+        $this->assertTrue(str_contains($save, 'Notes are limited to 1000 characters.'),
+            'The refusal names the limit, never the anchor-only message.');
+        $this->assertTrue(strpos($save, 'strlen($notes) > 1000') < strpos($save, 'anchorEntry'),
+            'The guard runs before re-derivation, so the misleading anchor refusal is unreachable for over-long notes.');
+    }
+
+    /**
      * Ledger concern pinned here (from Task 2's review): a device-hint lie
      * depends on no Fingerprint::SIGNALS key — its postable content is the
      * hardware hint itself — so the blank form must be able to build a

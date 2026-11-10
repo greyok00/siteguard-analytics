@@ -206,6 +206,7 @@ final class Beacon
         $people->touchVisitor($visitor, time(), true, $isView, [
             'ip' => $ip,
             'ua' => $ua,
+            'ip_hash' => $ipHash,
             'profile' => $profile,
             'last_path' => $isView ? $path : '',
         ]);

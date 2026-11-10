@@ -75,8 +75,8 @@ final class WpdbPeopleStore implements People
             : null;
 
         $this->db->query($this->db->prepare(
-            "INSERT INTO {$table} (id, first_seen, last_seen, sessions, pageviews, ip, ua, profile, last_path)
-             VALUES (%s, %s, %s, %d, %d, %s, %s, %s, %s)
+            "INSERT INTO {$table} (id, first_seen, last_seen, sessions, pageviews, ip, ua, ip_hash, profile, last_path)
+             VALUES (%s, %s, %s, %d, %d, %s, %s, %s, %s, %s)
              ON DUPLICATE KEY UPDATE
                 last_seen = VALUES(last_seen),
                 sessions = sessions + %d,
@@ -92,6 +92,10 @@ final class WpdbPeopleStore implements People
             $views,
             substr((string) ($meta['ip'] ?? ''), 0, 45),
             substr((string) ($meta['ua'] ?? ''), 0, 400),
+            // Same write the session row gets: the latest beacon hash wins
+            // (no IF guard), so attribution reads the address's freshest keyed
+            // form. touchSession threads the identical derivation side by side.
+            substr((string) ($meta['ip_hash'] ?? ''), 0, 40),
             $profile,
             substr((string) ($meta['last_path'] ?? ''), 0, 255),
             $sessions,
