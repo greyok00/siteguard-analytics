@@ -4,11 +4,13 @@ declare(strict_types=1);
 namespace SiteGuard\Tests;
 
 use PDO;
+use SiteGuard\Core\Profile\Watchlist as WatchlistLogic;
 use SiteGuard\Core\Store\Blocks;
 use SiteGuard\Core\Store\Counters;
 use SiteGuard\Core\Store\Distinct;
 use SiteGuard\Core\Store\Incidents;
 use SiteGuard\Core\Store\People;
+use SiteGuard\Core\Store\Watchlist;
 
 /**
  * SQLite implementations used only by the test suite. They mirror the SQL
@@ -38,6 +40,8 @@ final class SqliteDb
             request_count INTEGER NOT NULL, block_id INTEGER NOT NULL)');
         $this->pdo->exec('CREATE TABLE people (
             id TEXT PRIMARY KEY, profile TEXT NULL)');
+        $this->pdo->exec('CREATE TABLE siteguard_watchlist (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, payload TEXT NOT NULL)');
     }
 }
 
@@ -340,6 +344,52 @@ final class SqlitePeople implements People
     public function pruneBefore(int $before): int
     {
         return 0;
+    }
+}
+
+/**
+ * The owner-saved watchlist, as a pdo table of one JSON entry per row (the
+ * `siteguard_watchlist`-shaped content minus the option wrapper). Mirrors
+ * WpdbWatchlist::all semantics — each stored row runs through
+ * normalizeEntry, so a test can never sneak a hand-shaped entry past the
+ * same gate the real store applies.
+ */
+final class SqliteWatchlist implements Watchlist
+{
+    public function __construct(private PDO $pdo)
+    {
+    }
+
+    /** Replaces the whole list; each row normalized exactly like save() does. */
+    public function setEntries(array $entries): void
+    {
+        $this->save($entries);
+    }
+
+    public function all(): array
+    {
+        $stmt = $this->pdo->query('SELECT payload FROM siteguard_watchlist ORDER BY id');
+        $out = [];
+        foreach ((array) $stmt->fetchAll(PDO::FETCH_COLUMN) as $payload) {
+            $entry = WatchlistLogic::normalizeEntry(json_decode((string) $payload, true));
+            if ($entry !== null) {
+                $out[] = $entry;
+            }
+        }
+        return $out;
+    }
+
+    public function save(array $entries): void
+    {
+        $this->pdo->exec('DELETE FROM siteguard_watchlist');
+        $stmt = $this->pdo->prepare('INSERT INTO siteguard_watchlist (payload) VALUES (:p)');
+        foreach ($entries as $entry) {
+            $normalized = WatchlistLogic::normalizeEntry($entry);
+            if ($normalized === null) {
+                continue;
+            }
+            $stmt->execute([':p' => json_encode($normalized)]);
+        }
     }
 }
 
