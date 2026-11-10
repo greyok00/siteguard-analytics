@@ -81,6 +81,14 @@ final class InstallerTest extends TestCase
         $this->assertTrue(str_contains($store, "substr((string) (\$meta['ip_hash'] ?? ''), 0, 40)"),
             'The visitor row writes the latest beacon hash unclipped by the 32-hex keyed shape: same overwrite read the session row gets.');
 
+        // The update semantics, not just the INSERT binding: within the
+        // touchVisitor window, the duplicate-key list carries the same
+        // empty-skip guard ip/ua use, so a fresh beacon hash overwrites and
+        // an empty beacon never clobbers the stored keyed form.
+        $touch = (string) substr($store, 0, (int) strpos($store, 'profileFor'));
+        $this->assertTrue(str_contains($touch, "ip_hash = IF(VALUES(ip_hash) <> '', VALUES(ip_hash), ip_hash)"),
+            'touchVisitor repeat visits re-attribute: the ON DUPLICATE list overwrites ip_hash with the latest non-empty beacon hash, like ip/ua.');
+
         $beacon = (string) file_get_contents(SITEGUARD_DIR . 'src/Wp/Beacon.php');
         $this->assertSame(3, substr_count($beacon, '\'ip_hash\' => $ipHash,'),
             'The beacon threads its one hash derivation into all three stores: the events row, touchSession, and touchVisitor.');
