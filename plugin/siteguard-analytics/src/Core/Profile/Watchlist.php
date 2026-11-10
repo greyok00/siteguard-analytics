@@ -6,8 +6,8 @@ namespace SiteGuard\Core\Profile;
 
 /**
  * The fingerprint watchlist entry model: pure derivation, normalization,
- * import/export, and (from Task 3 on) the matcher that scores owner-saved
- * profiles against live stored fingerprints. An entry anchors ONLY
+ * and the matcher that scores owner-saved profiles against live stored
+ * fingerprints. An entry anchors ONLY
  * lie-shaped reasons the built-in detectors classify — the closed
  * vocabulary below — never honest raw values, so "matches a saved
  * profile" always means "already looks dishonest to the built-in rules".
@@ -207,7 +207,6 @@ final class Watchlist
      * attacker = one entry) and identical anchors imported twice collapse
      * to one id. Rules sort above signals, each set sorted independently,
      * so detector emission order can never change an id.
-     * detector emission order can never change an id.
      * @param array<string,string> $signals
      * @param list<string> $rules
      */
@@ -329,15 +328,16 @@ final class Watchlist
     /**
      * Removes one entry by id, preserving the order of the survivors.
      * Rows that are not entries (junk a buggy upstream let through) carry
-     * no valid id, so they stay: the store's normalize-at-save drops them
-     * next time anything is written. Never fatal.
+     * no valid id, so they cannot be the named id and stay: the store's
+     * normalize-at-save drops them next time anything is written. Never
+     * fatal — even against a list holding non-array junk.
      * @param list<array> $entries
      * @return list<array>
      */
     public static function without(array $entries, string $id): array
     {
         return array_values(array_filter($entries,
-            static fn (array $entry): bool => ($entry['id'] ?? null) !== $id));
+            static fn (mixed $entry): bool => !is_array($entry) || ($entry['id'] ?? null) !== $id));
     }
 
     /**
@@ -357,22 +357,185 @@ final class Watchlist
     }
 
     /**
-     * One matching entry emits exactly one hit, the same shape
-     * Fingerprint::hits returns — Task 4 feeds these straight into the
-     * score mix the built-in device-hint hits use. Implemented in Task 3
-     * (the matcher with its graded severity table); the Task-2 model
-     * carries the empty placeholder so Tasks 3–7 can wire against a
-     * stable signature.
+     * One matching entry emits exactly ONE hit, the shape the plan pins for
+     * watchlist scoring: {rule:"wl-{id}", group:Rules::GROUP_PROFILE,
+     * severity:int, evidence:array} — the evidence is an ARRAY (profile
+     * name, anchored reasons, entry id), unlike Fingerprint::hits whose
+     * evidence stays a string. Task 4 feeds these into the same score mix
+     * the built-in device-hint hits use. A match requires EVERY anchored
+     * rule's reason to re-fire on the live profile (the three detectors
+     * re-run there) AND every stored signal to equal the live-derived
+     * value — no partial scoring. Corrupt live profiles — decoded-JSON
+     * junk of any shape: non-strings, nested arrays, string offsets —
+     * produce no hits and never a warning: the profile is sanitized to
+     * strings before the detectors ever see it.
      * @param array<string,mixed> $profile
      * @param list<array{id:string,name:string,signals:array<string,string>,rules:list<string>,notes:string,created:int}> $entries
      * @return list<array{rule:string,group:string,severity:int,evidence:array}>
      */
     public static function hits(array $profile, array $entries): array
     {
-        return [];
+        if ($profile === []) {
+            return []; // an empty row proves nothing either way (the verdict law)
+        }
+        $clean = self::sanitizeProfile($profile);
+        $liveRules = array_values(array_unique(array_merge(
+            Fingerprint::impossibles($clean),
+            Fingerprint::conflicts($clean),
+            Fingerprint::headlessReasons($clean)
+        )));
+        // the impossible-hint severities, read verbatim through the one
+        // public face of Fingerprint's private HIT_SEVERITY table — the
+        // built-in hits() — so the two tables cannot drift apart. Every
+        // reason that scores is here; a fired reason the table has no row
+        // for scores nothing (the built-in law), so it grades null below.
+        $hintSeverities = [];
+        foreach (Fingerprint::hits($clean) as $hintHit) {
+            $hintSeverities[substr($hintHit['rule'], strlen('fp-'))] = $hintHit['severity'];
+        }
+        $liveSignals = self::liveSignals($clean);
+        $hits = [];
+        foreach ($entries as $entry) {
+            if (!is_array($entry) || !is_string($entry['id'] ?? null)
+                || !is_array($entry['signals'] ?? null) || !is_array($entry['rules'] ?? null)) {
+                continue; // junk a buggy upstream let through; normalization drops it at save
+            }
+            $matched = [];
+            $severity = 0;
+            $agree = true;
+            foreach ($entry['rules'] as $rule) {
+                $grade = is_string($rule) && in_array($rule, $liveRules, true)
+                    ? self::grade($rule, $hintSeverities)
+                    : null;
+                if ($grade === null) {
+                    $agree = false; // an anchored rule that does not re-fire live: no match
+                    break;
+                }
+                $matched[] = $rule;
+                $severity = max($severity, $grade);
+            }
+            if (!$agree) {
+                continue;
+            }
+            foreach ($entry['signals'] as $key => $stored) {
+                if (!is_string($key) || !is_string($stored) || $stored === ''
+                    || self::normalizeSignal($key, $stored) !== ($liveSignals[$key] ?? null)) {
+                    $agree = false; // every stored signal must equal the live-derived value
+                    break;
+                }
+            }
+            if (!$agree) {
+                continue;
+            }
+            $hits[] = [
+                'rule' => 'wl-' . $entry['id'],
+                'group' => \SiteGuard\Core\Waf\Rules::GROUP_PROFILE,
+                'severity' => $severity,
+                'evidence' => [
+                    'profile' => is_string($entry['name'] ?? null) ? $entry['name'] : '',
+                    'reasons' => $matched,
+                    'id' => $entry['id'],
+                ],
+            ];
+        }
+        return $hits;
     }
 
     // ------------------------------------------------------------ internals
+
+    /**
+     * The corrupt-profile law: callers hand Watchlist a decoded-JSON array
+     * that may contain junk of any shape — nested arrays, wrong scalars,
+     * string offsets — and the built-in detectors themselves emit E_ALL
+     * Array-to-string warnings on exactly such values (pre-existing on
+     * baseline, out of this file's scope to fix). So the matcher coerces
+     * BEFORE the detectors run: every field becomes the string it would be
+     * had the browser reported it, or silent emptiness when the value is
+     * not a string at all. Callers' runs stay warning-free; a coerced row
+     * can only read as silence, so a corrupt profile never matches.
+     * @param array<string,mixed> $profile
+     * @return array<string,string>
+     */
+    private static function sanitizeProfile(array $profile): array
+    {
+        $clean = [];
+        foreach ($profile as $key => $value) {
+            if (is_string($key) && is_string($value)) {
+                $clean[$key] = $value;
+            }
+        }
+        return $clean;
+    }
+
+    /**
+     * The live side of the signal table, re-derived exactly the way
+     * fromProfile normalized the stored side: single-field family
+     * resolution per key (the claimed family through the platform field
+     * alone, the stated family through ua_platform alone, both through
+     * Fingerprint::platform so the two tables agree by construction), the
+     * mobile flag as '0'/'1', and the WebGL strings trimmed. One layout
+     * for both sides of every comparison; no entry-specific knowledge.
+     * @param array<string,string> $profile
+     * @return array<string,string>
+     */
+    private static function liveSignals(array $profile): array
+    {
+        return [
+            'platform' => Fingerprint::platform(['platform' => $profile['platform'] ?? '']),
+            'ua_platform' => Fingerprint::platform(['ua_platform' => $profile['ua_platform'] ?? '']),
+            'ua_mobile' => self::mobileFlag($profile['ua_mobile'] ?? ''),
+            'webgl_vendor' => strtolower(trim($profile['webgl_vendor'] ?? '')),
+            'webgl_renderer' => strtolower(trim($profile['webgl_renderer'] ?? '')),
+        ];
+    }
+
+    /**
+     * One normalization for both table sides of one key, so a stored
+     * signal and its live counterpart are compared in the exact same
+     * form. Family keys and mobile flags are already canonical; the
+     * renderer/vendor strings arrive lowercased+trimmed on the live side
+     * and are lowercased here on the stored side — pageviews of one
+     * client drift in case and surrounding whitespace. Unknown keys
+     * answer null: the closed key set at normalization means this is
+     * unreachable for stored entries and makes a forged row simply never
+     * equal live.
+     */
+    private static function normalizeSignal(string $key, string $value): ?string
+    {
+        return match ($key) {
+            'platform', 'ua_platform', 'ua_mobile' => $value,
+            'webgl_vendor', 'webgl_renderer' => strtolower($value),
+            default => null,
+        };
+    }
+
+    /**
+     * The same '0'/'1' reading Fingerprint::impossibles' callers and
+     * conflicts() use: '1' or 'true' is mobile, everything else is not.
+     */
+    private static function mobileFlag(string $value): string
+    {
+        return in_array($value, ['1', 'true'], true) ? '1' : '0';
+    }
+
+    /**
+     * The graded severity one anchored reason scores on a watchlist hit.
+     * Conflict and renderer reasons — the classes the built-in corpus
+     * leaves evidence-only — score the deliberate, scoped watchlist bar:
+     * 3 (an honest browser never disagrees with itself, so an owner-named
+     * match carries the judgment weight of an off-scale hardware claim).
+     * The seven impossible-hint reasons keep Fingerprint::HIT_SEVERITY
+     * verbatim. Nothing else can be in a normalized entry, so nothing
+     * else needs a grade: an unknown rule answers null (never guessed).
+     * @param array<string,int> $hintSeverities
+     */
+    private static function grade(string $rule, array $hintSeverities): ?int
+    {
+        if (str_starts_with($rule, 'claimed:') || str_starts_with($rule, 'software-rendering:')) {
+            return 3;
+        }
+        return $hintSeverities[$rule] ?? null;
+    }
 
     /**
      * The stored form of a raw reported string. Beacon values are strings

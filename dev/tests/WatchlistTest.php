@@ -8,11 +8,14 @@ use SiteGuard\Core\Profile\Fingerprint;
 use SiteGuard\Core\Profile\Watchlist;
 
 /**
- * The watchlist entry-model laws: the anchor vocabulary is closed to
+ * The watchlist entry-model and matcher laws: the anchor vocabulary is closed to
  * lie-shaped reasons (a clean profile can never become an entry), the id
  * is content not name (renaming keeps one attacker = one entry), entry
  * normalization is the single gate every stored or imported row must
- * survive, and imports merge deterministically under the 200 cap.
+ * survive, imports merge deterministically under the 200 cap, and the
+ * matcher scores a stored profile only when every anchored reason re-fires
+ * live AND every stored signal agrees — one hit per matching entry,
+ * graded severity, warning-free on corrupt rows.
  */
 final class WatchlistTest extends TestCase
 {
@@ -98,6 +101,8 @@ final class WatchlistTest extends TestCase
 
     public function testSpoofedProfileEntryIsDeterministic(): void
     {
+        // the entry's stored signals must equal what the matcher derives
+        // live from the same profile (the round-trip law Task 3 depends on)
         $first = Watchlist::fromProfile(self::SPOOFED, 'Attacker A', 'rotates IPs');
         $second = Watchlist::fromProfile(self::SPOOFED, 'Attacker A', 'rotates IPs');
         $this->assertSame($first, $second,
@@ -118,6 +123,17 @@ final class WatchlistTest extends TestCase
             'the id is the first 12 hex of the content hash.');
         $this->assertSame(Watchlist::entryId($first['signals'], $first['rules']), $first['id'],
             'fromProfile derives the id exactly the way entryId does.');
+
+        // ...and the stored table equals the live-derived one on the same
+        // row (restricted to the keys the anchored rules actually pin — the
+        // stored side is minimal, the live table is the full domain —
+        // the matcher compares stored ⊆ live, so equality on the stored
+        // keys is the agreement the matcher needs)
+        $live = self::liveSignalsOf(self::SPOOFED);
+        foreach ($first['signals'] as $key => $stored) {
+            $this->assertSame($live[$key] ?? null, $stored,
+                "the live-side table derives exactly the stored value for {\$key}.");
+        }
     }
 
     public function testEntryIdSurvivesRename(): void
@@ -304,6 +320,243 @@ final class WatchlistTest extends TestCase
         $this->assertSame([$spoof, $touchless], Watchlist::without([$spoof, $touchless], 'missing12345678'),
             'an id that names nobody changes nothing.');
         $this->assertSame([], Watchlist::without([$spoof], $spoof['id']));
+    }
+
+    /**
+     * The Task-3 matcher: rule ids map onto the WAF corpus group vocabulary
+     * exactly like the built-in fingerprint hits do.
+     */
+    public function testGroupOfRoutesWatchlistHitsToTheProfileGroup(): void
+    {
+        $this->assertSame(\SiteGuard\Core\Waf\Rules::GROUP_PROFILE,
+            \SiteGuard\Core\Waf\Rules::groupOf('wl-abc123def456'),
+            'a wl- rule id rides the same profile group the fp- hits use.');
+        $this->assertSame(\SiteGuard\Core\Waf\Rules::GROUP_PROFILE,
+            \SiteGuard\Core\Waf\Rules::groupOf('fp-touchless-ios'),
+            'the pre-existing fp- routing stays put.');
+    }
+
+    /**
+     * The graded severity for a contradiction anchor: the deliberate,
+     * owned judgment bar (3), with the profile named in the evidence.
+     */
+    public function testContradictionEntryScoresThree(): void
+    {
+        // the contradiction-only client: the entry anchors exactly that lie
+        $entry = Watchlist::fromProfile(
+            ['platform' => 'MacIntel', 'ua_platform' => 'Windows', 'ua_mobile' => '0'],
+            'Mac-claiming Windows client');
+        $this->assertSame(['claimed:mac-stated:windows'], $entry['rules'],
+            'the entry under test anchors exactly the one contradiction.');
+        $live = ['platform' => 'MacIntel', 'ua_platform' => 'Windows', 'ua_mobile' => '0'];
+        $hits = Watchlist::hits($live, [$entry]);
+        $this->assertCount(1, $hits, 'one matching entry, exactly one hit.');
+        $this->assertSame('wl-' . $entry['id'], $hits[0]['rule'],
+            'the rule id names the stored entry.');
+        $this->assertSame(\SiteGuard\Core\Waf\Rules::GROUP_PROFILE, $hits[0]['group']);
+        $this->assertSame(3, $hits[0]['severity'],
+            'a contradiction anchor scores the graded watchlist bar: 3.');
+        $this->assertSame(['profile' => 'Mac-claiming Windows client',
+            'reasons' => ['claimed:mac-stated:windows'], 'id' => $entry['id']],
+            $hits[0]['evidence'],
+            'evidence is an array: the profile name, the anchored reasons, the id.');
+    }
+
+    /**
+     * Impossible-device-hint anchors keep the built-in table verbatim:
+     * a lie against the claimed device family is 4, junk is 1.
+     */
+    public function testImpossibleHintEntryKeepsItsSeverity(): void
+    {
+        $touchless = Watchlist::fromProfile(
+            ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0'],
+            'Touchless phone');
+        $hits = Watchlist::hits(
+            ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0'],
+            [$touchless]);
+        $this->assertCount(1, $hits);
+        $this->assertSame('wl-' . $touchless['id'], $hits[0]['rule']);
+        $this->assertSame(4, $hits[0]['severity'],
+            'an impossible-hint anchor keeps Fingerprint::HIT_SEVERITY verbatim: 4.');
+        $this->assertSame(['touchless-ios'], $hits[0]['evidence']['reasons'],
+            'the reasons come from the live re-run of the detectors.');
+
+        $unparseable = Watchlist::fromProfile(
+            ['tz' => 'America/New_York', 'tz_offset' => 'abc'], 'Junk offset');
+        $hits = Watchlist::hits(['tz' => 'America/New_York', 'tz_offset' => 'abc'], [$unparseable]);
+        $this->assertCount(1, $hits);
+        $this->assertSame(1, $hits[0]['severity'],
+            'an unparseable offset proves junk, not a demonstrated lie: severity 1 verbatim.');
+    }
+
+    /**
+     * The plan's Review Focus law: renderer/vendor strings drift in case
+     * and whitespace between two pageviews of one client — still a match.
+     */
+    public function testRendererAnchorMatchesCaseInsensitively(): void
+    {
+        $entry = Watchlist::fromProfile(
+            ['webgl_vendor' => 'Google Inc. (SwiftShader)', 'webgl_renderer' => 'ANGLE (SwiftShader)'],
+            'Software renderer');
+        $this->assertSame(['webgl_vendor', 'webgl_renderer'], array_keys($entry['signals']),
+            'a renderer lie pins both WebGL strings, never a half anchor.');
+        // two pageviews of one client: case and surrounding whitespace drift
+        $live = ['webgl_vendor' => '  google inc. (swiftshader)  ',
+            'webgl_renderer' => 'angle (SWIFTSHADER)'];
+        $hits = Watchlist::hits($live, [$entry]);
+        $this->assertCount(1, $hits,
+            'renderer/vendor compare case- and whitespace-insensitively on trimmed values.');
+        $this->assertSame(3, $hits[0]['severity'],
+            'a software-renderer anchor scores the graded watchlist bar: 3.');
+        $this->assertSame(['software-rendering:webgl_vendor', 'software-rendering:webgl_renderer'],
+            $hits[0]['evidence']['reasons'], 'the reasons come from the live re-run.');
+
+        // a genuinely different renderer string is a different client
+        $this->assertSame([], Watchlist::hits(
+            ['webgl_vendor' => 'Google Inc. (NVIDIA)', 'webgl_renderer' => 'ANGLE (NVIDIA)'],
+            [$entry]));
+    }
+
+    /**
+     * The design's core match law: EVERY field the entry carries must agree
+     * — no partial scoring. Both directions probed: the signals agree but a
+     * rule does not re-fire, and the rules re-fire but a signal disagrees.
+     */
+    public function testAllFieldsMustAgree(): void
+    {
+        // the entry anchors a contradiction AND a renderer lie together
+        $entry = Watchlist::fromProfile(self::SPOOFED, 'Full attacker');
+        $this->assertSame(
+            ['claimed:mac-stated:windows', 'software-rendering:webgl_vendor'], $entry['rules']);
+
+        // the signals agree but the renderer rule does not re-fire live
+        $contradictionOnly = ['platform' => 'MacIntel', 'ua_platform' => 'Windows', 'ua_mobile' => '0',
+            'webgl_vendor' => 'Google Inc. (NVIDIA)', 'webgl_renderer' => 'ANGLE (NVIDIA)'];
+        $this->assertSame([], Watchlist::hits($contradictionOnly, [$entry]),
+            'every anchored rule must re-fire, not just the signals agree.');
+
+        // the renderer lie re-fires but the contradiction does not: the pair
+        // signal disagrees and the claimed rule does not re-fire
+        $rendererOnly = ['platform' => 'Win32', 'ua_platform' => 'Windows', 'ua_mobile' => '0',
+            'webgl_vendor' => 'Google Inc. (SwiftShader)', 'webgl_renderer' => 'ANGLE (SwiftShader)'];
+        $this->assertSame([], Watchlist::hits($rendererOnly, [$entry]),
+            'every signal must agree live, not just one lie be present.');
+    }
+
+    /**
+     * One hit per matching entry, in stored entry order.
+     */
+    public function testTwoEntriesBothMatchEmitTwoHits(): void
+    {
+        $spoof = Watchlist::fromProfile(self::SPOOFED, 'Attacker A');
+        $touchless = Watchlist::fromProfile(
+            ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0'],
+            'Attacker B');
+        // the touchless profile cannot satisfy the spoof entry: one hit only
+        $this->assertSame(['wl-' . $touchless['id']], array_map(
+            static fn (array $hit): string => $hit['rule'],
+            Watchlist::hits(
+                ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1', 'touch' => '0'],
+                [$spoof, $touchless])),
+            'only the entry whose anchors all re-fire matches.');
+
+        // two entries anchored on overlapping views of the widened client:
+        // the touchless lie plus the off-scale memory tier. One client, two
+        // deliberate profiles, two hits, in entry order. (The id-collapse law
+        // keeps them distinct entries because the anchor sets differ.)
+        $widened = ['platform' => 'iPhone', 'ua_platform' => 'iOS', 'ua_mobile' => '1',
+            'touch' => '0', 'mem' => '7'];
+        $second = Watchlist::fromProfile($widened, 'Attacker A widened');
+        $this->assertNotSame($touchless['id'], $second['id'],
+            'different anchors, different content id: two distinct entries.');
+        $hits = Watchlist::hits($widened, [$touchless, $second]);
+        $this->assertCount(2, $hits, 'two matching entries emit two hits.');
+        $this->assertSame(['wl-' . $touchless['id'], 'wl-' . $second['id']],
+            array_map(static fn (array $hit): string => $hit['rule'], $hits),
+            'hits come out in stored entry order, one per entry.');
+    }
+
+    /**
+     * The corrupt-profile law: decoded-JSON junk (nested arrays, wrong
+     * types) coerces to no hits with ZERO warnings under E_ALL — the
+     * matcher sanitizes before the detectors ever see the row.
+     */
+    public function testGarbageProfileYieldsNoHits(): void
+    {
+        $entry = Watchlist::fromProfile(self::SPOOFED, 'Attacker');
+        $garbage = [
+            ['platform' => ['nested'], 'ua_platform' => 'Windows', 'ua_mobile' => '0',
+                'webgl_vendor' => ['x' => 'y'], 'webgl_renderer' => 5, 'touch' => true, 'mem' => []],
+            ['platform' => 'Win32', 'touch' => ['0'], 'screen' => ['1920x1080'],
+                'cores' => 999, 'mem' => '7', 'tz_offset' => 330,
+                'webgl_vendor' => 'Google Inc. (SwiftShader)'],
+        ];
+        $warnings = 0;
+        set_error_handler(static function (int $no, string $msg, string $file, int $line) use (&$warnings): bool {
+            $warnings++;
+            return true;
+        });
+        error_reporting(E_ALL);
+        try {
+            $hits = Watchlist::hits($garbage[0], [$entry]);
+            $this->assertSame([], $hits, 'nested junk reads as silence: no matches.');
+            $hits = Watchlist::hits($garbage[1], [$entry]);
+            $this->assertSame([], $hits,
+                'the SwiftShader string cannot match a profile whose signals never agree: no hits.');
+        } finally {
+            restore_error_handler();
+        }
+        $this->assertSame(0, $warnings,
+            'coercion happens inside Watchlist, before the detectors run: callers stay warning-free.');
+    }
+
+    public function testHitsAreEmptyForCleanAndEmptyLiveProfiles(): void
+    {
+        $entry = Watchlist::fromProfile(self::SPOOFED, 'Attacker');
+        $this->assertSame([], Watchlist::hits([], [$entry]),
+            'an empty live row proves nothing either way: no hits.');
+        $this->assertSame([], Watchlist::hits(
+            ['platform' => 'Win32', 'ua_platform' => 'Windows', 'ua_mobile' => '0',
+                'webgl_vendor' => 'Google Inc. (NVIDIA)', 'webgl_renderer' => 'ANGLE (NVIDIA)'],
+            [$entry]),
+            'an honest desktop matches nothing.');
+    }
+
+    /**
+     * Rider 1 from Task 2's review: without()'s docblock promises never
+     * fatal, but the closure was typed array — junk must merely survive.
+     */
+    public function testWithoutToleratesNonArrayJunkRows(): void
+    {
+        $spoof = Watchlist::fromProfile(self::SPOOFED, 'Attacker');
+        $kept = Watchlist::without(['junk-string', 42, $spoof], $spoof['id']);
+        $this->assertSame(['junk-string', 42], $kept,
+            'junk rows carry no entry id, so they cannot be the named id — they stay; never a fatal.');
+        $kept = Watchlist::without(['junk-string', $spoof], 'missing12345678');
+        $this->assertSame(['junk-string', $spoof], $kept,
+            'an id that names no surviving row changes nothing — junk included.');
+    }
+
+    /**
+     * The live-side signal table the matcher is required to derive,
+     * spelled out in the test exactly as the dispatch pins it: single-field
+     * family resolution (claimed through the platform field alone, stated
+     * through ua_platform alone, both through Fingerprint::platform),
+     * ua_mobile as '0'/'1', renderer/vendor trimmed strings. Mirroring it
+     * here is the independent check that the stored side and the live side
+     * can never disagree by construction drift.
+     * @param array<string,mixed> $profile
+     * @return array<string,string>
+     */
+    private static function liveSignalsOf(array $profile): array
+    {
+        return [
+            'platform' => Fingerprint::platform(['platform' => $profile['platform'] ?? '']),
+            'ua_platform' => Fingerprint::platform(['ua_platform' => $profile['ua_platform'] ?? '']),
+            'ua_mobile' => in_array((string) ($profile['ua_mobile'] ?? ''), ['1', 'true'], true) ? '1' : '0',
+            'webgl_vendor' => trim($profile['webgl_vendor'] ?? ''),
+            'webgl_renderer' => trim($profile['webgl_renderer'] ?? ''),
+        ];
     }
 
     /**

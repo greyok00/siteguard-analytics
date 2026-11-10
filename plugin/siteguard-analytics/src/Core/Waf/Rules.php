@@ -212,16 +212,17 @@ final class Rules
 
     /**
      * The group for one rule id, for incident chips and probes. Fingerprint
-     * rules ("fp-*") belong to the profile group without being patterns;
-     * rate-limit rows (rate_10s, breadth_600s) and anything unknown answer
-     * their plain families rather than a corpus group.
+     * rules ("fp-*") and watchlist matches ("wl-*") belong to the profile
+     * group without being patterns; rate-limit rows (rate_10s, breadth_600s)
+     * and anything unknown answer their plain families rather than a corpus
+     * group.
      */
     public static function groupOf(string $rule): string
     {
         if ($rule === '') {
             return '';
         }
-        if (str_starts_with($rule, 'fp-')) {
+        if (str_starts_with($rule, 'fp-') || str_starts_with($rule, 'wl-')) {
             return self::GROUP_PROFILE;
         }
         foreach (self::all() as $entry) {
