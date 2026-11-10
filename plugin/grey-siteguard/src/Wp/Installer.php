@@ -25,8 +25,8 @@ final class Installer
         if (!self::prerequisites()) {
             deactivate_plugins(plugin_basename(SITEGUARD_FILE));
             wp_die(
-                esc_html('SiteGuard Analytics needs WordPress 6.4+, PHP 8.1+, and the $wpdb layer. It was not activated.'),
-                'SiteGuard Analytics',
+                esc_html('Grey SiteGuard needs WordPress 6.4+, PHP 8.1+, and the $wpdb layer. It was not activated.'),
+                'Grey SiteGuard',
                 ['back_link' => true]
             );
         }

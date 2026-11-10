@@ -1,10 +1,10 @@
-=== Grey SiteGuard + Analytics ===
+=== Grey SiteGuard ===
 Contributors: 00greyok00
 Tags: security, analytics, rate limiting, incidents, privacy
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.1.11
+Stable tag: 0.1.12
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -101,6 +101,16 @@ jurisdiction. Consult your own counsel.
 
 == Changelog ==
 
+= 0.1.12 =
+* Renamed the plugin to **Grey SiteGuard**: the WAF is the product and
+  analytics is one of its features, so the name no longer leads with it. The
+  plugin folder is `grey-siteguard/`, the bootstrap is
+  `grey-siteguard.php`, and the text domain is `grey-siteguard`. Existing
+  options, tables, capabilities, and blocks carry over untouched; the old
+  folder can be removed after the new one is active.
+* The plugin header and the version constant now move in sync (0.1.11
+  shipped with both still reading 0.1.9).
+
 = 0.1.11 =
 * Fingerprint watchlist: save a visitor's tampering profile (name, notes,
   anchors) and it scores on the same WAF ladder with graded severity; every
@@ -163,6 +173,11 @@ jurisdiction. Consult your own counsel.
 * Single-page dashboard, request coverage matrix, and operations checks.
 
 == Upgrade Notice ==
+
+= 0.1.12 =
+The plugin is renamed Grey SiteGuard (folder `grey-siteguard/` main file
+`grey-siteguard.php`); settings, tables, and blocks carry over. Deactivate
+the old copy, install the new zip, and the rename is done.
 
 = 0.1.11 =
 The visitors table gains one column through the scheduled table-version

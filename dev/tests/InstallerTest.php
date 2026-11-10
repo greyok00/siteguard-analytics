@@ -66,7 +66,7 @@ final class InstallerTest extends TestCase
         // install() compares the stored option against this constant. The
         // in-house 0.1.6 move (0.1.x: tables gain columns in place) bumps
         // exactly this constant; the pin demands the bump to above 2.
-        $plugin = (string) file_get_contents(SITEGUARD_DIR . 'siteguard-analytics.php');
+        $plugin = (string) file_get_contents(SITEGUARD_DIR . 'grey-siteguard.php');
         preg_match("/define\('SITEGUARD_TABLE_VERSION', '(\d+)'\);/", $plugin, $m);
         $this->assertNotSame([], $m, 'The table version constant must be defined in the plugin header.');
         $this->assertTrue((int) ($m[1] ?? 0) > 2,

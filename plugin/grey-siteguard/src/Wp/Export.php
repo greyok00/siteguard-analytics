@@ -88,7 +88,7 @@ final class Export
         $payload = [
             'generated' => gmdate('c'),
             'site' => home_url('/'),
-            'plugin' => 'SiteGuard Analytics ' . (defined('SITEGUARD_VERSION') ? SITEGUARD_VERSION : ''),
+            'plugin' => 'Grey SiteGuard ' . (defined('SITEGUARD_VERSION') ? SITEGUARD_VERSION : ''),
             'note' => 'Rows are capped at ' . self::BUNDLE_ROWS . ' per table, newest first. "counts" is the full table size.',
             'counts' => $counts,
             'tables' => $data,

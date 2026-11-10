@@ -14,7 +14,7 @@ declare(strict_types=1);
 
 $root = dirname(__DIR__, 2);
 define('ABSPATH', $root . '/');
-define('SITEGUARD_DIR', $root . '/plugin/siteguard-analytics/');
+define('SITEGUARD_DIR', $root . '/plugin/grey-siteguard/');
 
 // The stores call wpdb's fetch-mode constants UNQUALIFIED from inside the
 // SiteGuard\Wp\Store namespace; in real WordPress those resolve to the loaded

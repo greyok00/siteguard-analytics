@@ -11,7 +11,7 @@ declare(strict_types=1);
  * seconds is denied for the HTML profile with the default settings.
  *
  * The core classes are shared with the WordPress plugin. In a real project,
- * copy `plugin/siteguard-analytics/src/Core` into your source tree or add it
+ * copy `plugin/grey-siteguard/src/Core` into your source tree or add it
  * to Composer's autoload, then point the PSR-4 mapping at it.
  */
 
@@ -31,7 +31,7 @@ use SiteGuard\Slim\SiteGuardMiddleware;
 use Slim\Factory\AppFactory;
 
 require __DIR__ . '/vendor/autoload.php';
-require __DIR__ . '/../../plugin/siteguard-analytics/src/Core/autoload.php';
+require __DIR__ . '/../../plugin/grey-siteguard/src/Core/autoload.php';
 require __DIR__ . '/src/PdoStores.php';
 require __DIR__ . '/src/SiteGuardMiddleware.php';
 

@@ -1,14 +1,14 @@
 <?php
 /**
- * Plugin Name: Grey SiteGuard + Analytics
+ * Plugin Name: Grey SiteGuard
  * Plugin URI:  https://randybarham.com
  * Description: Active request protection, incident records, and light first-party analytics for WordPress.
- * Version:     0.1.9
+ * Version:     0.1.12
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * License: GPL-2.0-or-later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: grey-siteguard-analytics
+ * Text Domain: grey-siteguard
  *
  * SiteGuard decides before a protected response is produced: deterministic
  * rate limits and temporary blocks run from `parse_request` (before the main
@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SITEGUARD_VERSION', '0.1.11');
+define('SITEGUARD_VERSION', '0.1.12');
 define('SITEGUARD_FILE', __FILE__);
 define('SITEGUARD_DIR', plugin_dir_path(__FILE__));
 define('SITEGUARD_URL', plugin_dir_url(__FILE__));

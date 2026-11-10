@@ -1,8 +1,8 @@
 <div align="center">
 
-<img src="plugin/siteguard-analytics/assets/banner-1544x500.png" alt="Grey SiteGuard + Analytics banner" width="720">
+<img src="plugin/grey-siteguard/assets/banner-1544x500.png" alt="Grey SiteGuard banner" width="720">
 
-# Grey SiteGuard + Analytics
+# Grey SiteGuard
 
 **Deterministic request protection with a fingerprint watchlist, incident records, and light first-party analytics for WordPress.**
 
@@ -15,7 +15,7 @@
 
 ## What is it?
 
-Grey SiteGuard + Analytics treats a WordPress site like a network endpoint. Every request is resolved to a subject (a signed-in account, a network address, or a first-party browser id), classified into one of ten endpoint classes, and checked against that class's limits before WordPress renders anything. A client that crosses a line gets a temporary block, and an incident record stores the rule, the counter, and the evidence that caused it. The engine is deterministic: no risk score, no model, no randomness, so every block can be explained by the row it wrote. Everything lives on one admin page and runs entirely inside WordPress, with no CDN, no Redis, no root access, and no paid service.
+Grey Grey SiteGuard treats a WordPress site like a network endpoint. Every request is resolved to a subject (a signed-in account, a network address, or a first-party browser id), classified into one of ten endpoint classes, and checked against that class's limits before WordPress renders anything. A client that crosses a line gets a temporary block, and an incident record stores the rule, the counter, and the evidence that caused it. The engine is deterministic: no risk score, no model, no randomness, so every block can be explained by the row it wrote. Everything lives on one admin page and runs entirely inside WordPress, with no CDN, no Redis, no root access, and no paid service.
 
 The plugin keeps its data in its own ten `wp_sg_*` tables in the site's MySQL database: pageviews, sessions, visitors, request counters, distinct-path tracking, blocks, incidents, an audit log, and a coverage matrix. Nothing is sent to, or stored in, any external service.
 
@@ -42,7 +42,7 @@ It is for people who self-host a WordPress site on ordinary shared hosting and w
 
 ## Install
 
-1. Download the plugin zip from this repository's Releases page (or copy `plugin/siteguard-analytics/` into `wp-content/plugins/`).
+1. Download the plugin zip from this repository's Releases page (the archive's root folder is `grey-siteguard/`), or copy `plugin/grey-siteguard/` into `wp-content/plugins/`.
 2. In WordPress, open **Plugins > Add New > Upload Plugin**, choose the zip, then install and activate.
 3. Activation creates the ten `wp_sg_*` tables, grants the `sg_*` capabilities, and schedules the retention jobs.
 4. Open **SiteGuard** in the admin menu. The Balanced profile is active with enforcement on.

@@ -18,9 +18,9 @@ if (!defined('ABSPATH')) {
     define('ABSPATH', $root . '/');
 }
 if (!defined('SITEGUARD_DIR')) {
-    define('SITEGUARD_DIR', $root . '/plugin/siteguard-analytics/');
+    define('SITEGUARD_DIR', $root . '/plugin/grey-siteguard/');
 }
-require $root . '/plugin/siteguard-analytics/src/Core/autoload.php';
+require $root . '/plugin/grey-siteguard/src/Core/autoload.php';
 require __DIR__ . '/TestCase.php';
 require __DIR__ . '/SqliteStores.php';
 require __DIR__ . '/Support.php';

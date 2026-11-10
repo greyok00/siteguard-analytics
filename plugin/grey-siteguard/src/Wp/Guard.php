@@ -202,7 +202,7 @@ final class Guard
         header('X-SiteGuard: blocked');
         wp_die(
             esc_html(self::message($decision)),
-            esc_html__('Too Many Requests', 'grey-siteguard-analytics'),
+            esc_html__('Too Many Requests', 'grey-siteguard'),
             [
                 'response' => absint($decision->status),
                 'back_link' => false,
