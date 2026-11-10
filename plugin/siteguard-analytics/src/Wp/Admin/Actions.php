@@ -36,6 +36,12 @@ final class Actions
     /** The 200-entry watchlist cap, mirrored from the private model/adapter consts; the WatchlistTest flood probe is the drift guard. */
     private const WATCHLIST_CAP = 200;
 
+    /** Per-viewer candidate dismissals cap; the click list stays small and the newest always wins. */
+    private const DISCARD_CAP = 100;
+
+    /** The user-meta key the discard handler writes and the card reads. */
+    private const DISCARD_META = 'siteguard_wl_dismissed';
+
     public static function boot(): void
     {
         add_action('admin_post_siteguard_settings', [self::class, 'saveSettings']);
@@ -46,6 +52,7 @@ final class Actions
         add_action('admin_post_siteguard_export_bundle', [self::class, 'exportBundle']);
         add_action('admin_post_siteguard_watchlist_save', [self::class, 'watchlistSave']);
         add_action('admin_post_siteguard_watchlist_delete', [self::class, 'watchlistDelete']);
+        add_action('admin_post_siteguard_watchlist_discard', [self::class, 'watchlistDiscard']);
         add_action('admin_post_siteguard_watchlist_import', [self::class, 'watchlistImport']);
         add_action('admin_post_siteguard_watchlist_export', [self::class, 'watchlistExport']);
     }
@@ -269,6 +276,58 @@ final class Actions
         self::audit('watchlist.removed', $id, ['removed' => $existed]);
         Menu::redirect(Menu::PROFILES, $existed ? 'Watchlist entry removed.' : 'No watchlist entry with that id.',
             $existed ? 'success' : 'error');
+    }
+
+    /**
+     * The candidates card's per-browser Discard: one visitor id hidden in
+     * the viewer's user-meta dismissal list — never the watchlist, never
+     * any shared option, never persisted anywhere else. The stored cap is
+     * the list's own hygiene (the visitors prune makes ids stale in 30
+     * days anyway); a full list drops the OLDEST dismissal so the newest
+     * click always takes effect. The id is validated by shape before it is
+     * written anywhere; an unknown-visitor POST stores the id anyway — the
+     * card only ever reads ids its own rows carried, so a forged one is a
+     * harmless no-op hiding nothing that was not already hidden.
+     */
+    public static function watchlistDiscard(): void
+    {
+        self::requireCap(Caps::MANAGE_BLOCKS);
+        check_admin_referer('siteguard_watchlist_discard');
+
+        $visitorId = sanitize_text_field(wp_unslash((string) ($_POST['visitor'] ?? '')));
+        if (!Crypto::isId($visitorId)) {
+            Menu::redirect(Menu::PROFILES, 'That visitor id is not valid.', 'error');
+        }
+        $dismissed = self::dismissals((int) get_current_user_id());
+        if (!in_array($visitorId, $dismissed, true)) {
+            $dismissed[] = $visitorId;
+            if (count($dismissed) > self::DISCARD_CAP) {
+                $dismissed = array_slice($dismissed, -self::DISCARD_CAP);
+            }
+            update_user_meta((int) get_current_user_id(), self::DISCARD_META, $dismissed);
+        }
+        Menu::redirect(Menu::PROFILES, 'Candidate hidden: it stays hidden for you only, and returns if it beacons again.');
+    }
+
+    /**
+     * The viewer's dismissal list, shape-guarded (junk reads as empty).
+     * Public because the candidates card filters its own rows with it —
+     * the read side of the same per-browser verb.
+     * @return list<string>
+     */
+    public static function dismissals(int $userId): array
+    {
+        $raw = get_user_meta($userId, self::DISCARD_META, true);
+        if (!is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $id) {
+            if (is_string($id) && Crypto::isId($id)) {
+                $out[] = $id;
+            }
+        }
+        return $out;
     }
 
     /**

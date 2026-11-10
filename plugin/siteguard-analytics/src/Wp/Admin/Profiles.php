@@ -8,6 +8,7 @@ use SiteGuard\Core\Profile\Fingerprint;
 use SiteGuard\Core\Profile\Segments;
 use SiteGuard\Core\Profile\Watchlist as WatchlistLogic;
 use SiteGuard\Core\Subjects;
+use SiteGuard\Wp\Admin\Menu;
 use SiteGuard\Wp\Analytics;
 use SiteGuard\Wp\Caps;
 use SiteGuard\Wp\Config;
@@ -237,7 +238,7 @@ final class Profiles
                     esc_html(self::rulesPhrase((array) $entry['rules'])),
                     esc_html(number_format_i18n($counts[$id] ?? 0)),
                     esc_html(self::createdDate((int) ($entry['created'] ?? 0))),
-                    self::deleteButton($id),
+                    '<div class="sg-wl-row-actions">' . self::editButton($id) . self::deleteButton($id) . '</div>',
                 ];
             }
             Views::table(
@@ -253,10 +254,31 @@ final class Profiles
         }
 
         if (Caps::userCan(Caps::MANAGE_BLOCKS)) {
-            self::blankForm($entries);
+            self::blankForm($entries, self::editingEntry($entries));
             self::importForm();
         }
         Views::closeCard();
+    }
+
+    /**
+     * The entry the Edit affordance named, or null for a blank create. The
+     * id rides in the URL (`wl_edit`), it is the public content id the table
+     * already shows, and an unknown or malformed value answers null — the
+     * honest fallback is the blank form, never a prefilled guess.
+     * @param list<array<string,mixed>> $entries
+     */
+    private static function editingEntry(array $entries): ?array
+    {
+        $raw = sanitize_text_field(wp_unslash((string) ($_GET['wl_edit'] ?? '')));
+        if (!preg_match('/^[0-9a-f]{12}$/', $raw)) {
+            return null;
+        }
+        foreach ($entries as $entry) {
+            if (is_array($entry) && (string) ($entry['id'] ?? '') === $raw) {
+                return $entry;
+            }
+        }
+        return null;
     }
 
     /**
@@ -306,7 +328,17 @@ final class Profiles
         }
 
         $candidates = [];
+        // The current viewer's per-browser dismissals (the discard verb is
+        // per-admin-browser by design): MANAGE_BLOCKS viewers get their own
+        // list, everyone else reads an empty one because the discard form
+        // never rendered for them.
+        $dismissed = Caps::userCan(Caps::MANAGE_BLOCKS)
+            ? \SiteGuard\Wp\Admin\Actions::dismissals((int) get_current_user_id())
+            : [];
         foreach (self::candidateVisitors($since) as $visitor) {
+            if (in_array((string) $visitor['visitor'], $dismissed, true)) {
+                continue; // per-browser discard: hidden for THIS viewer only
+            }
             if (self::attributedToGate($visitor, $subjects, $subjectHashes, $ipMode)) {
                 $candidates[] = $visitor;
             }
@@ -333,7 +365,8 @@ final class Profiles
                     Fingerprint::conflicts($profile),
                     Fingerprint::headlessReasons($profile)
                 )))),
-                $saveable ? self::saveButton((string) $candidate['visitor']) : '',
+                '<div class="sg-wl-row-actions">' . self::saveButton((string) $candidate['visitor'])
+                    . self::discardButton((string) $candidate['visitor']) . '</div>',
             ];
             $rows[] = $row;
         }
@@ -552,6 +585,23 @@ final class Profiles
             . '</form>';
     }
 
+    /**
+     * Edit as an inline link (no POST, no nonce: it carries nothing but the
+     * entry id, the same public content id the table already shows, and the
+     * form it prefills posts its own nonce). The handler-side upsert law
+     * needs no new verb — the same save handler receives exactly what the
+     * blank form builds.
+     */
+    private static function editButton(string $id): string
+    {
+        if (!Caps::userCan(Caps::MANAGE_BLOCKS)) {
+            return '';
+        }
+        return '<a class="button button-small" href="' . esc_url(
+            add_query_arg(['page' => Menu::OVERVIEW, 'wl_edit' => $id], admin_url('admin.php')) . '#profiles'
+        ) . '">Edit</a> ';
+    }
+
     /** Save-as on one candidate row or a visitor detail: a hidden id only. */
     private static function saveButton(string $visitorId): string
     {
@@ -571,31 +621,84 @@ final class Profiles
     }
 
     /**
-     * Create-from-blank: name, notes, and the anchor vocabulary as grouped
-     * checkboxes, each carrying its rule string as one value (the group
-     * field name gives the handler its anchor array) and its fixed fixed
-     * values documented beside it. The handler re-derives everything
-     * server-side; nothing here is trusted about which entry results.
-     * @param list<array> $entries current entries, shown only as count context
+     * Discard on one candidate row: per-browser, non-persisted outside the
+     * viewer's own user meta — the card hides the row for THIS viewer the
+     * next render; any other viewer and the pruned 30-day rollup still
+     * show it. The form POSTs the visitor id only.
      */
-    private static function blankForm(array $entries): void
+    private static function discardButton(string $visitorId): string
     {
-        if (count($entries) >= 200) {
+        if (!Caps::userCan(Caps::MANAGE_BLOCKS)) {
+            return '';
+        }
+        return '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="sg-inline">'
+            . '<input type="hidden" name="action" value="siteguard_watchlist_discard">'
+            . '<input type="hidden" name="_wpnonce" value="' . esc_attr(wp_create_nonce('siteguard_watchlist_discard')) . '">'
+            . '<input type="hidden" name="visitor" value="' . esc_attr($visitorId) . '">'
+            . '<button type="submit" class="button button-small">Discard</button>'
+            . '</form>';
+    }
+
+    /**
+     * Create-from-blank, and — via the Edit affordance — the same form
+     * prefilled from an existing entry: its name, its notes, and its
+     * anchored rules' checkboxes checked. Prefill is READABLE only: every
+     * value the form submits is still the fixture report the detectors fire
+     * on (the raw stored signals ride only where the fixtures cannot — the
+     * WebGL strings an entry stores raw), so the handler's re-derivation
+     * law carries unchanged. Renaming keeps the id; changed anchors make a
+     * new content id, the deliberate-new-profile law the upsert applies —
+     * the hint below the form says exactly that when editing.
+     * @param list<array> $entries current entries for the cap and the edit lookup
+     * @param array|null $editing entry to prefill from, or null for a blank form
+     */
+    private static function blankForm(array $entries, ?array $editing = null): void
+    {
+        if (count($entries) >= 200 && $editing === null) {
             echo '<p class="sg-empty">The watchlist is at its 200-entry limit: remove one before adding another.</p>';
             return;
         }
-        echo '<h4 class="sg-wl-form-head">Name a profile from blank</h4>';
+        $editing = is_array($editing) ? $editing : null;
+        $editRules = [];
+        $editSignals = [];
+        if ($editing !== null) {
+            /** @var list<string> */
+            $editRules = array_values(array_filter(
+                (array) ($editing['rules'] ?? []),
+                static fn (mixed $rule): bool => is_string($rule)
+            ));
+            /** @var array<string,string> */
+            foreach ((array) ($editing['signals'] ?? []) as $key => $value) {
+                if (is_string($key) && is_string($value)) {
+                    $editSignals[$key] = $value;
+                }
+            }
+        }
+        $editingName = $editing !== null ? (string) ($editing['name'] ?? '') : '';
+        $editingNotes = $editing !== null ? (string) ($editing['notes'] ?? '') : '';
+
+        echo '<h4 class="sg-wl-form-head" id="sg-wl-form">'
+            . esc_html($editing !== null ? 'Edit a saved profile' : 'Name a profile from blank') . '</h4>';
         echo '<p class="sg-lead">Choose the lies to anchor; each carries the exact report the built-in detectors fire on, '
             . 'and the server re-derives the entry from those values &mdash; it refuses any checked lie that does not '
             . 're-fire, so nothing but an honest detection can be saved.</p>';
+        if ($editing !== null) {
+            $editUrl = Menu::url('profiles');
+            echo '<p class="description">Editing &ldquo;' . esc_html($editingName !== '' ? $editingName : 'unnamed')
+                . '&rdquo;. <a href="' . esc_url($editUrl) . '#profiles">Start from blank instead</a>. Changing this '
+                . 'entry&rsquo;s name keeps its id in place; changing the anchored reasons saves a NEW profile entry '
+                . 'beside it &mdash; delete the old one separately if you no longer want it.</p>';
+        }
         $index = 0;
         Views::formOpen('siteguard_watchlist_save', 'siteguard_watchlist_save');
         echo '<table class="form-table" role="presentation"><tbody>';
         echo '<tr><th scope="row"><label for="sg-wl-name">Name</label></th><td>';
-        echo '<input type="text" name="name" id="sg-wl-name" class="regular-text" required maxlength="191" placeholder="One attacker, named">';
+        echo '<input type="text" name="name" id="sg-wl-name" class="regular-text" required maxlength="191" value="'
+            . esc_attr($editingName) . '" placeholder="One attacker, named">';
         echo '</td></tr>';
         echo '<tr><th scope="row"><label for="sg-wl-notes">Notes</label></th><td>';
-        echo '<textarea name="notes" id="sg-wl-notes" rows="2" class="large-text" maxlength="1000" placeholder="Why this browser matters (kept with the entry)"></textarea>';
+        echo '<textarea name="notes" id="sg-wl-notes" rows="2" class="large-text" maxlength="1000" '
+            . 'placeholder="Why this browser matters (kept with the entry)">' . esc_html($editingNotes) . '</textarea>';
         echo '</td></tr>';
         foreach (self::anchorGroups() as $groupLabel => $rules) {
             echo '<tr><th scope="row">' . esc_html($groupLabel) . '</th><td><fieldset class="sg-wl-anchors">';
@@ -607,17 +710,34 @@ final class Profiles
                 // the handler reads the rule as absent and skips the whole
                 // item — silence, never trust.
                 $anchorIndex = (string) $index;
+                $checked = in_array($rule, $editRules, true);
+                // When editing, the entry's own raw WebGL strings overlay the
+                // fixtures: the renderer lie pins BOTH strings raw, and a
+                // half-reported anchor would re-derive a different entry. All
+                // other anchors post the fixture values.
                 $fixed = self::anchorFixedSignals($rule);
+                if ($checked && (str_starts_with((string) $rule, 'software-rendering:webgl_'))) {
+                    foreach (['webgl_vendor', 'webgl_renderer'] as $webglKey) {
+                        if (isset($editSignals[$webglKey]) && $editSignals[$webglKey] !== '') {
+                            $fixed[$webglKey] = $editSignals[$webglKey];
+                        }
+                    }
+                }
                 $labels = [];
                 foreach ($fixed as $key => $value) {
                     $labels[] = (self::ANCHOR_SIGNAL_LABELS[$key] ?? $key) . ' ' . $value;
                 }
+                // The anchor label is exactly what the checkbox says it fires:
+                // pairs phrase as claims, everything else reads the fixed
+                // phrase table with the raw rule string as the fallback.
+                $anchorLabel = self::reasonPhrase((string) $rule);
                 echo '<label class="sg-wl-anchor">'
-                    . '<input type="checkbox" name="anchors[' . esc_attr($anchorIndex) . '][rule]" value="' . esc_attr($rule) . '"> '
-                    . '<span>' . esc_html(self::reasonPhrase($rule)) . '</span>';
+                    . '<input type="checkbox" name="anchors[' . esc_attr($anchorIndex) . '][rule]" value="'
+                    . esc_attr((string) $rule) . '"' . checked($checked, true, false) . '> '
+                    . '<span>' . esc_html($anchorLabel) . '</span>';
                 foreach ($fixed as $key => $value) {
                     echo '<input type="hidden" name="anchors[' . esc_attr($anchorIndex) . '][signals]['
-                        . esc_attr($key) . ']" value="' . esc_attr($value) . '">';
+                        . esc_attr((string) $key) . ']" value="' . esc_attr((string) $value) . '">';
                 }
                 echo '<em class="sg-wl-fixed">' . esc_html(implode('; ', $labels)) . '</em></label>';
                 $index++;
@@ -626,6 +746,11 @@ final class Profiles
         }
         echo '</tbody></table>';
         Views::formClose('Save watchlist profile');
+        if ($editing !== null) {
+            echo '<p class="sg-foot">Saving an edited profile re-derives everything through the same gate: only lies '
+                . 'the detectors still fire on are kept, and the saved content &mdash; not the URL &mdash; decides the '
+                . 'entry&rsquo;s id.</p>';
+        }
     }
 
     /**

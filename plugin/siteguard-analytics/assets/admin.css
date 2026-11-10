@@ -943,6 +943,18 @@
   display: inline-block;
 }
 
+/* Row action stacks: Edit + Delete (watchlist), Save + Discard (candidates).
+   One row, buttons side by side, wrapping on narrow screens. */
+.sg-wl-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.sg-wl-row-actions form,
+.sg-wl-row-actions .button {
+  margin: 0;
+}
+
 /* Watchlist cards --------------------------------------------------------- */
 /* Anchor checkboxes read as one list per group; the fixed fixed-report hint
    is a quiet tail under each label. */
