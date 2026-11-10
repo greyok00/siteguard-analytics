@@ -259,9 +259,13 @@ final class Actions
         $store = new WpdbWatchlist();
         $before = $store->all();
         $kept = WatchlistLogic::without($before, $id);
-        $store->save($kept);
-
         $existed = count($kept) !== count($before);
+        if ($existed) {
+            // rider from Task 6's review: a no-op id must not rewrite the
+            // option — the save write happens only behind a real removal, so
+            // a stray POST naming nothing touches exactly nothing.
+            $store->save($kept);
+        }
         self::audit('watchlist.removed', $id, ['removed' => $existed]);
         Menu::redirect(Menu::PROFILES, $existed ? 'Watchlist entry removed.' : 'No watchlist entry with that id.',
             $existed ? 'success' : 'error');
@@ -309,10 +313,20 @@ final class Actions
             $kept[] = $entry;
         }
         $store = new WpdbWatchlist();
+        // rider from Task 6's review: the notice and audit report the
+        // REALIZED delta — what the saved list actually gained — instead of
+        // the normalizer-survivor count, which overstates when the merged
+        // rows replace saved ids in place (imported wins) or the 200-cap
+        // slice refuses the append. The store re-reads the option on every
+        // all(), so both counts measure the option truthfully.
+        $before = count($store->all());
         $store->save(WatchlistLogic::mergeImport($store->all(), $kept));
+        $after = count($store->all());
+        $realized = max(0, $after - $before);
 
-        self::audit('watchlist.imported', 'watchlist', ['kept' => count($kept), 'dropped' => $dropped]);
-        Menu::redirect(Menu::PROFILES, self::importNotice(count($kept), $dropped));
+        self::audit('watchlist.imported', 'watchlist',
+            ['added' => $realized, 'dropped' => $dropped]);
+        Menu::redirect(Menu::PROFILES, self::importNotice(count($kept), $dropped, $realized));
     }
 
     /**
@@ -376,7 +390,16 @@ final class Actions
             foreach ($signals as $key => $value) {
                 if (is_string($key) && is_string($value)
                     && (in_array($key, $postable, true) || in_array($key, Fingerprint::DEVICE_HINTS, true))) {
-                    $profile[$key] = $value; // the fixed value the detectors re-fire on
+                    // rider from Task 6's review: each raw POST value passes
+                    // the sanitizer before re-derivation (keys are already
+                    // whitelisted by the check above). The function_exists
+                    // guard keeps the gate unit-callable under the test
+                    // runner, which loads no WordPress shim; live WordPress
+                    // always sanitizes. The handler unslashes anchors before
+                    // this runs, so no slash stripping is owed here.
+                    $profile[$key] = function_exists('sanitize_text_field')
+                        ? sanitize_text_field($value)
+                        : $value; // the fixed value the detectors re-fire on
                 }
                 // else: unknown or non-string key/value — ignored (silence, not trust)
             }
@@ -392,14 +415,24 @@ final class Actions
         return $entry;
     }
 
-    private static function importNotice(int $kept, int $dropped): string
+    /**
+     * The import notice. $realized is the measured store delta (added rows),
+     * never the survivor count: below the survivor number it means saved ids
+     * were replaced in place, or a full list sliced the append off — the
+     * short sentence says which way the store really moved.
+     */
+    private static function importNotice(int $kept, int $dropped, int $realized): string
     {
         if ($kept === 0) {
             return 'No valid entries in that payload'
                 . ($dropped > 0 ? ' (' . $dropped . ' dropped as invalid).' : '.');
         }
-        return 'Imported ' . $kept . ' watchlist ' . ($kept === 1 ? 'entry' : 'entries')
-            . ($dropped > 0 ? '; ' . $dropped . ' dropped as invalid.' : '.');
+        $base = 'Imported ' . $kept . ' watchlist ' . ($kept === 1 ? 'entry' : 'entries');
+        if ($realized < $kept) {
+            $base .= '; the saved list gained ' . $realized . ' '
+                . ($realized === 1 ? 'entry' : 'entries');
+        }
+        return $base . ($dropped > 0 ? '; ' . $dropped . ' dropped as invalid.' : '.');
     }
 
     private static function requireCap(string $capability): void

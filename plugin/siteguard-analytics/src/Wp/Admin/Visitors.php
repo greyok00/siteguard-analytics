@@ -4,8 +4,10 @@ declare(strict_types=1);
 namespace SiteGuard\Wp\Admin;
 
 use SiteGuard\Wp\Analytics;
+use SiteGuard\Core\Profile\Watchlist as WatchlistLogic;
 use SiteGuard\Wp\Caps;
 use SiteGuard\Wp\Installer;
+use SiteGuard\Wp\Store\WpdbWatchlist;
 
 /**
  * The visitor list and the detail view behind each row.
@@ -182,6 +184,23 @@ final class Visitors
             }
             Views::table(['Signal', 'Value'], $rows);
             echo '<p class="sg-lead">Canvas, WebGL, and audio values are one-way hashes computed by the browser; this site does not keep the raw render.</p>';
+
+            // Saved-profile hits, the same matcher the Gate runs: this
+            // browser's stored profile against the owner watchlist. Readable
+            // under VIEW_ANALYTICS like the rest of the card; saving one is
+            // the MANAGE_BLOCKS form further down.
+            $matches = WatchlistLogic::hits($profile, (new WpdbWatchlist())->all());
+            if ($matches) {
+                $lines = [];
+                foreach ($matches as $match) {
+                    $evidence = is_array($match['evidence'] ?? null) ? $match['evidence'] : [];
+                    $name = (string) ($evidence['profile'] ?? '');
+                    $lines[] = '<span class="sg-wl-match">Matches saved profile: <strong>'
+                        . esc_html($name !== '' ? $name : 'unnamed') . '</strong></span>';
+                }
+                echo '<div class="sg-wl-matches">' . implode('', $lines) . '</div>';
+            }
+            self::saveProfileForm($id, $profile);
         } else {
             echo '<p class="sg-empty">No fingerprint payload was recorded. Rows collected before version 0.1.6 carry only the grouping hash.</p>';
         }
@@ -233,6 +252,36 @@ final class Visitors
         }
         Views::table(['Account', 'First seen', 'Last seen'], $accountRows, 'This browser has not been seen signed in.');
         Views::closeCard();
+    }
+
+    /**
+     * Save-as form at the foot of the Fingerprint card. The POST carries
+     * only the visitor id and the owner's words (name, notes): the handler
+     * re-derives every lie from the stored profile itself, exactly the way
+     * the candidates card's button does. Blank-cap 191/1000 mirror the
+     * model's own name/notes caps so a refusal here never hides a truncation
+     * the server would apply anyway.
+     */
+    private static function saveProfileForm(string $visitorId, array $profile): void
+    {
+        if (!Caps::userCan(Caps::MANAGE_BLOCKS)) {
+            return;
+        }
+        $already = WatchlistLogic::hits($profile, (new WpdbWatchlist())->all()) !== [];
+        echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '" class="sg-wl-save">';
+        wp_nonce_field('siteguard_watchlist_save');
+        echo '<input type="hidden" name="action" value="siteguard_watchlist_save">';
+        echo '<input type="hidden" name="visitor_id" value="' . esc_attr($visitorId) . '">';
+        echo '<table class="form-table sg-wl-save-table" role="presentation"><tbody>';
+        echo '<tr><th scope="row"><label for="sg-wl-vname">Save as watchlist profile</label></th><td>';
+        echo '<input type="text" name="name" id="sg-wl-vname" class="regular-text" required maxlength="191" placeholder="Name this attacker"> ';
+        echo '<input type="text" name="notes" class="regular-text" maxlength="1000" placeholder="Notes (optional)"> ';
+        echo '<button type="submit" class="button">Save</button> ';
+        echo '</td></tr></tbody></table>';
+        echo '<p class="description">' . esc_html($already
+            ? 'A saved profile already matches this browser &mdash; saving again updates it in place.'
+            : 'The entry re-derives this browser&rsquo;s lie reasons from the stored profile; nothing here is trusted beyond the name.') . '</p>';
+        echo '</form>';
     }
 
     private static function list(Analytics $analytics, string $selected): void

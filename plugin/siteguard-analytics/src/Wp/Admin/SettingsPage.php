@@ -68,6 +68,14 @@ final class SettingsPage
             . '2000px-wide iPhone, an off-scale memory tier), the report scores as an attack signature. The browser id is never '
             . 'blocked — the network address behind the request is, on the shared ladder.</p></td></tr>';
 
+        echo '<tr><th scope="row">Watchlist enforcement</th><td>';
+        echo '<input type="hidden" name="waf_watchlist" value="0">';
+        echo '<label><input type="checkbox" name="waf_watchlist" value="1"' . checked((bool) $s['waf_watchlist'], true, false) . '> '
+            . 'Score owner-saved fingerprint profiles</label>';
+        echo '<p class="description">When a request&rsquo;s browser matches a saved watchlist entry, the match scores on the '
+            . 'same ladder as every other content signature &mdash; and is inert while the watchlist is empty. Verify matches '
+            . 'read as evidence in the Observe mode of content rules before arming them here.</p></td></tr>';
+
         echo '<tr><th scope="row">Collection</th><td>';
         echo '<input type="hidden" name="collect" value="0">';
         echo '<label><input type="checkbox" name="collect" value="1"' . checked((bool) $s['collect'], true, false) . '> Load the first-party collector on the front end</label>';

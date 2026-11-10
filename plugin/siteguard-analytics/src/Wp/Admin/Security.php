@@ -7,6 +7,8 @@ use SiteGuard\Core\Ip;
 use SiteGuard\Wp\Caps;
 use SiteGuard\Wp\Config;
 use SiteGuard\Wp\Installer;
+use SiteGuard\Wp\Store\WpdbIncidentStore;
+use SiteGuard\Wp\Store\WpdbWatchlist;
 
 /**
  * The Security section: active temporary blocks, recent incident records, and
@@ -111,13 +113,18 @@ final class Security
         $deviceHints = !empty($settings['waf_device_hints']);
         $hintsWord = !$deviceHints ? 'off'
             : (empty($settings['collect']) ? 'armed (inert: collection is off)' : 'armed');
-        $incidentsToday = (new \SiteGuard\Wp\Store\WpdbIncidentStore($GLOBALS['wpdb']))->countSince($now - 86400);
+        $watchlistArmed = !empty($settings['waf_watchlist']);
+        $watchlistEntries = count((new WpdbWatchlist())->all());
+        $incidentsToday = (new WpdbIncidentStore($GLOBALS['wpdb']))->countSince($now - 86400);
         $activeBlocks = Config::blocks()->countActive($now);
 
         Views::stats([
             'Content gate' => ucfirst($mode),
             'Rules' => number_format_i18n($ruleCount),
             'Device hints' => $hintsWord,
+            'Watchlist' => $watchlistArmed && $watchlistEntries > 0
+                ? 'armed (' . number_format_i18n($watchlistEntries) . ' ' . ($watchlistEntries === 1 ? 'entry' : 'entries') . ')'
+                : 'off',
             'Incidents today' => number_format_i18n($incidentsToday),
             'Active blocks' => number_format_i18n($activeBlocks),
         ]);
