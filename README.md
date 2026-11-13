@@ -15,7 +15,7 @@
 
 ## What is it?
 
-Grey Grey SiteGuard treats a WordPress site like a network endpoint. Every request is resolved to a subject (a signed-in account, a network address, or a first-party browser id), classified into one of ten endpoint classes, and checked against that class's limits before WordPress renders anything. A client that crosses a line gets a temporary block, and an incident record stores the rule, the counter, and the evidence that caused it. The engine is deterministic: no risk score, no model, no randomness, so every block can be explained by the row it wrote. Everything lives on one admin page and runs entirely inside WordPress, with no CDN, no Redis, no root access, and no paid service.
+Grey SiteGuard treats a WordPress site like a network endpoint. Every request is resolved to a subject (a signed-in account, a network address, or a first-party browser id), classified into one of ten endpoint classes, and checked against that class's limits before WordPress renders anything. A client that crosses a line gets a temporary block, and an incident record stores the rule, the counter, and the evidence that caused it. The engine is deterministic: no risk score, no model, no randomness, so every block can be explained by the row it wrote. Everything lives on one admin page and runs entirely inside WordPress, with no CDN, no Redis, no root access, and no paid service.
 
 The plugin keeps its data in its own ten `wp_sg_*` tables in the site's MySQL database: pageviews, sessions, visitors, request counters, distinct-path tracking, blocks, incidents, an audit log, and a coverage matrix. Nothing is sent to, or stored in, any external service.
 
