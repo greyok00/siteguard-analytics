@@ -4,7 +4,7 @@ Tags: security, analytics, rate limiting, incidents, privacy
 Requires at least: 6.4
 Tested up to: 7.1
 Requires PHP: 8.1
-Stable tag: 0.1.9
+Stable tag: 0.1.13
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -94,6 +94,20 @@ jurisdiction. Consult your own counsel.
 
 == Changelog ==
 
+= 0.1.13 =
+* The Security tab's Lift button actually lifts a block again: the form is
+  rendered outside the filtered table-cell path, so the nonce and hidden
+  inputs survive output escaping instead of being stripped.
+* Visitor sessions are counted once per browser session rather than once per
+  beacon; the visitors row no longer inflates by every pageview and leave.
+* Reverse-DNS verification of claimed crawlers holds a short per-IP lock, so
+  concurrent first hits share one lookup and the rest fail fast instead of
+  stalling PHP workers on DNS during spoofed-bot floods.
+* The identities table is pruned with the rest of the people data on the
+  sessions-and-visitors retention schedule, and orphaned rows are deleted.
+* The README and docs describe the fingerprint signals actually collected and
+  no longer point at trees or result files that do not ship in the repository.
+
 = 0.1.9 =
 * Renamed Grey SiteGuard + Analytics, so the directory slug names this plugin
   and is not confused with the existing SiteGuard plugins.
@@ -129,6 +143,11 @@ jurisdiction. Consult your own counsel.
 * Single-page dashboard, request coverage matrix, and operations checks.
 
 == Upgrade Notice ==
+
+= 0.1.13 =
+Bug-fix release: the Lift button works, session counts are accurate, DNS
+verification cannot stall requests, and the identities table is pruned. No
+schema change.
 
 = 0.1.9 =
 Plugin Check clean: no warnings. No schema or behaviour change.

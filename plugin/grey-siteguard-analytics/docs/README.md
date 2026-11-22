@@ -10,7 +10,7 @@ alongside without ever deciding access. It needs no CDN, no Redis, no root
 access, no background worker, and no paid service. It runs on ordinary shared
 hosting with PHP 8.1+ and MySQL.
 
-Version 0.1.5. Tested on WordPress 7.0.2 / PHP 8.5.
+Version 0.1.13. Tested on WordPress 7.0.2 / PHP 8.5.
 
 ## How one request is judged
 

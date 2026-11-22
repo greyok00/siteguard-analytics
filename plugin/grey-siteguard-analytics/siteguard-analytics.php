@@ -3,7 +3,7 @@
  * Plugin Name: Grey SiteGuard + Analytics
  * Plugin URI:  https://github.com/greyok00/siteguard-analytics
  * Description: Active request protection, incident records, and light first-party analytics for WordPress.
- * Version:     0.1.9
+ * Version:     0.1.13
  * Requires at least: 6.4
  * Requires PHP: 8.1
  * License: GPL-2.0-or-later
@@ -22,7 +22,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('SITEGUARD_VERSION', '0.1.9');
+define('SITEGUARD_VERSION', '0.1.13');
 define('SITEGUARD_FILE', __FILE__);
 define('SITEGUARD_DIR', plugin_dir_path(__FILE__));
 define('SITEGUARD_URL', plugin_dir_url(__FILE__));

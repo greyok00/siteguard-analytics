@@ -14,7 +14,7 @@ subject the enforcer counted — the picture and the decision cannot disagree.
 Everything runs inside WordPress: no CDN, no Redis, no root access, no paid
 service.
 
-**Version 0.1.9** · WordPress 6.4+ · PHP 8.1+ · GPL-2.0-or-later
+**Version 0.1.13** · WordPress 6.4+ · PHP 8.1+ · GPL-2.0-or-later
 
 ![The dashboard: 14-day traffic, ranked pages, devices, and protection coverage](docs/images/admin-overview.png)
 
@@ -235,7 +235,7 @@ than implying full coverage.
 
 ## Install
 
-1. Download `grey-siteguard-analytics-0.1.9.zip` from Releases.
+1. Download `grey-siteguard-analytics-0.1.13.zip` from Releases.
 2. In WordPress open **Plugins → Add New → Upload Plugin**, choose the ZIP,
    then **Install Now** and **Activate**.
 3. Activation checks PHP, MySQL and `$wpdb`, creates ten `wp_sg_*` tables,
