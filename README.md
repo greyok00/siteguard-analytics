@@ -224,7 +224,7 @@ recent pageviews; and any signed-in accounts it was seen under.
 
 ## Quick start
 
-1. Download `grey-siteguard-analytics-0.1.13.zip` from
+1. Download `grey-siteguard-0.1.13.zip` from
    [Releases](https://github.com/greyok00/siteguard-analytics/releases).
 2. In WordPress, open **Plugins → Add New → Upload Plugin**, choose the ZIP,
    then **Install Now** and **Activate**.
@@ -254,7 +254,7 @@ shows the reason instead of leaving the site half-installed.
 | Profile | Balanced | Strict doubles protection; Observe records without blocking |
 | Enforcement | On | Turn off to keep counting while tuning limits |
 | Collection | On | Turn off to stop the front-end collector |
-| Address storage | Keyed hash | `full` keeps raw addresses; `none` stores neither |
+| Address storage | `full` | `hashed` keys the address; `none` stores neither |
 | Trusted proxies | empty | Your host sits behind a load balancer or CDN |
 | Block ladder | 300 s → 24 h | You want shorter or longer blocks |
 
