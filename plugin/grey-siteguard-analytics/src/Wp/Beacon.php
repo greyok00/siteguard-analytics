@@ -149,7 +149,7 @@ final class Beacon
 
         $people = new WpdbPeopleStore($GLOBALS['wpdb']);
         $isView = $type === 'pageview';
-        $people->touchSession(
+        $newSession = $people->touchSession(
             $session,
             [
                 'visitor' => $visitor,
@@ -164,7 +164,7 @@ final class Beacon
             time(),
             $isView
         );
-        $people->touchVisitor($visitor, time(), true, $isView, [
+        $people->touchVisitor($visitor, time(), $newSession, $isView, [
             'ip' => $ip,
             'ua' => $ua,
             'profile' => $profile,

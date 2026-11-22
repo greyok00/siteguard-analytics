@@ -47,7 +47,18 @@ final class Crawler
             return $cached === '1';
         }
 
+        // The reverse lookup runs on a PHP worker inside the request and has
+        // no timeout control. One worker resolves a fresh IP at a time; every
+        // other request during the lookup fails fast and is not cached, so a
+        // genuine crawler is verified on its next request instead.
+        $lock = $key . '_lock';
+        if (get_transient($lock)) {
+            return false;
+        }
+        set_transient($lock, '1', 10);
+
         $ok = self::forwardConfirmed($ip);
+        delete_transient($lock);
         set_transient($key, $ok ? '1' : '0', 12 * HOUR_IN_SECONDS);
         return $ok;
     }

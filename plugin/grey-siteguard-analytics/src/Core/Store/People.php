@@ -15,7 +15,8 @@ interface People
 
 
 
-    public function touchSession(string $sessionId, array $meta, int $now, bool $newPageview): void;
+    /** Returns true when the session row did not exist and was just created. */
+    public function touchSession(string $sessionId, array $meta, int $now, bool $newPageview): bool;
 
     public function closeSession(string $sessionId, string $exitPath, int $now): void;
 

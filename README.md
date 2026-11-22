@@ -80,17 +80,21 @@ server-resolved subjects (account, address) can be blocked.
 
 ## The fingerprint, and what it is for
 
-SiteGuard computes a passive correlation fingerprint from five coarse signals
-the browser volunteers: language, timezone, screen size rounded to the nearest
-100 pixels, device pixel ratio, and whether the device reports touch. The
-signals are lowercased, trimmed, sorted, and HMAC-SHA256 hashed with a
-site-scoped salt. The stored value carries its version (`fp1:…`), so rotating
-the salt makes old hashes stop matching instead of silently comparing across
-rotations.
+SiteGuard computes a passive correlation fingerprint from the signals the
+browser volunteers to JavaScript: language and languages, timezone and its
+offset, screen size and viewport, device pixel ratio and colour depth, touch
+support, CPU core count, device memory, platform, user-agent client hints
+(brands, platform, mobile, model, architecture), WebGL vendor and renderer
+strings, and one-way hashes of a canvas render and an audio graph. The signals
+are lowercased, trimmed, sorted, and HMAC-SHA256 hashed with a site-scoped
+salt. The stored value carries its version (`fp1:…`), so rotating the salt
+makes old hashes stop matching instead of silently comparing across rotations.
 
-Nothing invasive is collected — no canvas, WebGL, audio, font enumeration, or
-plugin list. That is a deliberate trade: those signals are unreliable and
-legally radioactive, and the server does not need them to stop a flood.
+Canvas and audio are recorded only as one-way hashes, never as images or
+sound, and font enumeration and plugin lists are not read at all. Everything
+else is stored as reported. These are identifying signals and the plugin does
+collect them: the consent setting controls whether they are gathered, and
+retention deletes them on schedule.
 
 The fingerprint is recorded with each pageview and is never used to make a
 decision. Enforcement keys on the account, the address, and the visitor id —
@@ -234,8 +238,8 @@ than implying full coverage.
 1. Download `grey-siteguard-analytics-0.1.9.zip` from Releases.
 2. In WordPress open **Plugins → Add New → Upload Plugin**, choose the ZIP,
    then **Install Now** and **Activate**.
-3. Activation checks PHP, MySQL and `$wpdb`, creates twelve `wp_sg_*` tables,
-   grants eight `sg_*` capabilities to administrators, and schedules two cron
+3. Activation checks PHP, MySQL and `$wpdb`, creates ten `wp_sg_*` tables,
+   grants seven `sg_*` capabilities to administrators, and schedules two cron
    events.
 4. Open **SiteGuard** in the admin menu. The Balanced profile is active with
    enforcement on.
@@ -328,45 +332,15 @@ server-side model call is an outbound transfer of personal data that the plugin
 performs on your behalf. An export you carry yourself has none of that
 ambiguity, and it works with any tool you choose.
 
-## Static sites and Slim
-
-- `integrations/static/` — a beacon script and a standalone SQLite collector
-  for non-WordPress sites. Analytics only; there is no PHP hook to enforce on.
-- `integrations/slim/` — a PSR-15 middleware that reuses `SiteGuard\Core` with
-  PDO stores, so a Slim or Laravel app gets the same classifier, enforcer, and
-  temporary-block rules.
-
 ## Requirement check
 
 - WordPress 6.4 or newer, PHP 8.1 or newer.
 - MySQL 5.7+ or MariaDB 10.3+.
 - No root access, no Redis, no external service.
 
-## Development
-
-```
-php dev/tests/run.php            # 59 tests, 403 assertions, no dependencies
-php dev/tests/run.php Enforcer   # filter by name
-```
-
-The engine in `src/Core/` has no WordPress dependency. The WordPress layer only
-supplies storage, request context, and hooks — which is why the same rules run
-under the Slim middleware.
-
-To build the installable ZIP (comments stripped from PHP, JS/CSS minified when
-`esbuild` is on `PATH`):
-
-```
-bash dev/build-release.sh
-```
-
-The script writes `dist/siteguard-analytics-<version>.zip` and updates
-`dist/SHA256SUMS`; the working tree is untouched.
-
 ## Documentation
 
 - [`plugin/grey-siteguard-analytics/docs/README.md`](plugin/grey-siteguard-analytics/docs/README.md) — user guide, defaults, recovery, privacy
-- [`plugin/grey-siteguard-analytics/docs/TEST-RESULTS.md`](plugin/grey-siteguard-analytics/docs/TEST-RESULTS.md) — executed tests and their output
 
 ## License
 

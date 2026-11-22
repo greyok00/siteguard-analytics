@@ -10,7 +10,7 @@ alongside without ever deciding access. It needs no CDN, no Redis, no root
 access, no background worker, and no paid service. It runs on ordinary shared
 hosting with PHP 8.1+ and MySQL.
 
-Version 0.1.5. Tested on WordPress 7.0.2 / PHP 8.5 (see `TEST-RESULTS.md`).
+Version 0.1.5. Tested on WordPress 7.0.2 / PHP 8.5.
 
 ## How one request is judged
 
@@ -64,7 +64,7 @@ promise that a cache is correctly configured.
 1. Upload `siteguard-analytics.zip` in **Plugins → Add New → Upload Plugin**,
    or copy the `siteguard-analytics` folder into `wp-content/plugins/`.
 2. Activate. Activation checks PHP, MySQL and the `wpdb` object, creates the
-   twelve `wp_sg_*` tables through `dbDelta`, grants the eight `sg_*`
+   ten `wp_sg_*` tables through `dbDelta`, grants the seven `sg_*`
    capabilities to administrators, and schedules two cron events.
 3. The shipped profile is **Balanced** with enforcement on. Everything the
    plugin does lives on the single **SiteGuard** page, in the Operations
@@ -103,16 +103,18 @@ Subjects are keyed HMACs, not raw values: `ip4:…`, `ip6:…` (collapsed to /64
 `hashed`; `full` keeps the address, `none` omits it.
 
 **The fingerprint is a correlation layer, not a decision key.** Each pageview
-records a keyed, versioned hash (`fp1:…`) of five coarse signals the browser
-volunteers: language, timezone, screen size bucketed to the nearest 100 px,
-device pixel ratio, and touch support. The signals are lowercased, sorted, and
-HMAC-SHA256 hashed with a site-scoped salt; the version prefix means rotating
-the salt makes old hashes stop matching rather than silently compare across
-rotations. Nothing invasive is read — no canvas, WebGL, audio, font
-enumeration, or plugin list. Enforcement never consults the fingerprint: it
-keys on the account, the address, and the visitor id. The fingerprint exists so
-two visits that share a hash can be recognised as one browser when the cookie
-has been cleared or the address has changed.
+records a keyed, versioned hash (`fp1:…`) of the signals the browser
+volunteers: language and languages, timezone and its offset, screen size and
+viewport, device pixel ratio and colour depth, touch support, CPU cores,
+device memory, platform, user-agent client hints, WebGL vendor and renderer
+strings, and one-way hashes of a canvas render and an audio graph. The signals
+are lowercased, sorted, and HMAC-SHA256 hashed with a site-scoped salt; the
+version prefix means rotating the salt makes old hashes stop matching rather
+than silently compare across rotations. Canvas and audio are stored only as
+hashes, and font enumeration or plugin lists are not read. Enforcement never
+consults the fingerprint: it keys on the account, the address, and the visitor
+id. The fingerprint exists so two visits that share a hash can be recognised
+as one browser when the cookie has been cleared or the address has changed.
 
 The collector is first-party, uses random first-party ids, and never
 resurrects cookies or tracks across sites.
@@ -201,17 +203,6 @@ wp siteguard coverage [--class=html]
 ```
 
 The CLI loads the same Core classes; it does not bypass the audit log.
-
-## Static site and Slim
-
-`integrations/static/` contains a beacon script and a standalone SQLite
-collector for sites that are not WordPress. It records analytics only: there is
-no PHP hook to enforce on, so the README explains the edge-rule translation
-instead of pretending otherwise.
-
-`integrations/slim/` contains a PSR-15 middleware that reuses
-`SiteGuard\Core` with PDO stores for MySQL or SQLite, so a Slim or Laravel app
-gets the same enforcer and the same temporary-block semantics.
 
 ## Layout
 

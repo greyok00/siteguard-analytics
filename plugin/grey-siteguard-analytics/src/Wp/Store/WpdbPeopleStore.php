@@ -20,11 +20,20 @@ final class WpdbPeopleStore implements People
     }
 
 
-    public function touchSession(string $sessionId, array $meta, int $now, bool $newPageview): void
+    public function touchSession(string $sessionId, array $meta, int $now, bool $newPageview): bool
     {
         $table = $this->tables['sessions'];
         $ts = gmdate('Y-m-d H:i:s', $now);
         $increment = $newPageview ? 1 : 0;
+
+        // The upsert cannot report whether the row already existed, so ask
+        // first: the caller counts a visitor session only when this answers
+        // true. Two concurrent first hits can both see it, which overcounts by
+        // one; every later beacon of the same session no longer does.
+        $existing = $this->db->get_var($this->db->prepare(
+            "SELECT 1 FROM {$table} WHERE id = %s",
+            $sessionId
+        ));
 
         $this->db->query($this->db->prepare(
             "INSERT INTO {$table}
@@ -51,6 +60,8 @@ final class WpdbPeopleStore implements People
             (string) ($meta['ip_hash'] ?? ''),
             $increment
         ));
+
+        return $existing === null;
     }
 
     public function closeSession(string $sessionId, string $exitPath, int $now): void
@@ -131,7 +142,7 @@ final class WpdbPeopleStore implements People
     {
         $cut = gmdate('Y-m-d H:i:s', $before);
         $total = 0;
-        foreach (['sessions', 'visitors'] as $key) {
+        foreach (['sessions', 'visitors', 'identities'] as $key) {
             $table = $this->tables[$key];
             $this->db->query($this->db->prepare(
                 "DELETE FROM {$table} WHERE last_seen < %s LIMIT 2000",
@@ -139,6 +150,15 @@ final class WpdbPeopleStore implements People
             ));
             $total += (int) $this->db->rows_affected;
         }
+        // Anonymous pageviews keep a visitor's last_seen fresh without touching
+        // its identity rows, so an identity can outlive the visitor row it
+        // points at. Drop pairs whose visitor is gone.
+        $this->db->query(
+            "DELETE i FROM {$this->tables['identities']} i"
+            . " LEFT JOIN {$this->tables['visitors']} v ON i.visitor = v.id"
+            . " WHERE v.id IS NULL"
+        );
+        $total += (int) $this->db->rows_affected;
         return $total;
     }
 }

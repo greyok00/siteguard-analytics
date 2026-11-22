@@ -92,14 +92,15 @@ final class Security
         if (!Caps::userCan(Caps::MANAGE_BLOCKS)) {
             return '';
         }
-        $url = admin_url('admin-post.php');
-        $nonce = wp_create_nonce('siteguard_lift');
-        return '<form method="post" action="' . esc_url($url) . '" class="sg-inline">'
-            . '<input type="hidden" name="action" value="siteguard_lift">'
-            . '<input type="hidden" name="_wpnonce" value="' . esc_attr($nonce) . '">'
-            . '<input type="hidden" name="subject" value="' . esc_attr($subject) . '">'
-            . '<button type="submit" class="button button-small">Lift</button>'
-            . '</form>';
+        // Table cells pass through wp_kses_post, which strips <form> and
+        // <input>, so a posted form could not survive the render. A nonce'd
+        // GET link is safe markup there; Actions::lift() reads the subject
+        // and the nonce from $_REQUEST, which covers both methods.
+        $url = wp_nonce_url(
+            admin_url('admin-post.php?action=siteguard_lift&subject=' . rawurlencode($subject)),
+            'siteguard_lift'
+        );
+        return '<a class="button button-small" href="' . esc_url($url) . '">Lift</a>';
     }
 
     private static function when(string $utc): string

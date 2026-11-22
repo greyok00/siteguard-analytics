@@ -90,7 +90,8 @@ final class Actions
         self::requireCap(Caps::MANAGE_BLOCKS);
         check_admin_referer('siteguard_lift');
 
-        $subject = self::normaliseSubject(trim(sanitize_text_field(wp_unslash((string) ($_POST['subject'] ?? '')))));
+        // The lift link is a GET navigation, so read both methods.
+        $subject = self::normaliseSubject(trim(sanitize_text_field(wp_unslash((string) ($_REQUEST['subject'] ?? '')))));
         if ($subject === null) {
             Menu::redirect(Menu::SECURITY, 'That subject is not valid.', 'error');
         }
